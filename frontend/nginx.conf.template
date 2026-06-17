@@ -21,7 +21,7 @@ http {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     # Set maximum request body size to 50MB to handle large drawings with embedded images
-    client_max_body_size 50M;
+    client_max_body_size 200M;
 
     server {
         listen 80;
