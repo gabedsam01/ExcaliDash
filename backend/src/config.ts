@@ -8,6 +8,7 @@ import {
   RequestLimits,
   summarizeRequestLimits,
 } from "./utils/limits";
+import type { LibraryConfig } from "./libraries/types";
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ interface Config {
   bootstrapSetupCodeTtlMs: number;
   bootstrapSetupCodeMaxAttempts: number;
   limits: RequestLimits;
+  libraries: LibraryConfig;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced";
@@ -326,6 +328,48 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
   };
 };
 
+const DEFAULT_LIBRARIES_CATALOG_URL =
+  "https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json";
+const DEFAULT_LIBRARIES_BASE_URL =
+  "https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries";
+
+/**
+ * Curated Excalidraw library packs configuration. Only the official Excalidraw
+ * catalog host is reachable (enforced at fetch time, see libraries/validators).
+ */
+const resolveLibraryConfig = (): LibraryConfig => {
+  const downloadMaxMb = getRequiredEnvNumber("LIBRARY_DOWNLOAD_MAX_MB", 25);
+  return {
+    catalogUrl: getOptionalEnv(
+      "EXCALIDRAW_LIBRARIES_CATALOG_URL",
+      DEFAULT_LIBRARIES_CATALOG_URL,
+    ),
+    baseUrl: getOptionalEnv(
+      "EXCALIDRAW_LIBRARIES_BASE_URL",
+      DEFAULT_LIBRARIES_BASE_URL,
+    ),
+    cacheDir: getOptionalEnv("LIBRARY_CACHE_DIR", "/app/data/libraries"),
+    refreshIntervalHours: getRequiredEnvNumber(
+      "LIBRARY_REFRESH_INTERVAL_HOURS",
+      24,
+    ),
+    downloadTimeoutMs: getRequiredEnvNumber("LIBRARY_DOWNLOAD_TIMEOUT_MS", 15000),
+    downloadMaxBytes: Math.trunc(downloadMaxMb * 1024 * 1024),
+    publicSearchEnabled: getOptionalBoolean(
+      "LIBRARY_PUBLIC_SEARCH_ENABLED",
+      true,
+    ),
+    publicSearchMaxResults: getRequiredEnvNumber(
+      "LIBRARY_PUBLIC_SEARCH_MAX_RESULTS",
+      25,
+    ),
+    autoRefreshOnStart: getOptionalBoolean(
+      "LIBRARY_AUTO_REFRESH_ON_START",
+      true,
+    ),
+  };
+};
+
 const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 
@@ -359,6 +403,7 @@ export const config: Config = {
     10,
   ),
   limits: loadRequestLimits(),
+  libraries: resolveLibraryConfig(),
 };
 
 if (config.nodeEnv === "production") {

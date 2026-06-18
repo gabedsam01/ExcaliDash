@@ -10,6 +10,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
 import { ApiKeysCard } from './settings/ApiKeysCard';
+import { LibrariesCard } from './settings/LibrariesCard';
 
 export const Settings: React.FC = () => {
     const [collections, setCollections] = useState<Collection[]>([]);
@@ -252,6 +253,8 @@ export const Settings: React.FC = () => {
             )}
 
             <ApiKeysCard />
+
+            <LibrariesCard />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div className="flex flex-col items-center justify-center gap-3 sm:gap-4 p-4 sm:p-6 lg:p-8 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]">

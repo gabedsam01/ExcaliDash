@@ -38,6 +38,12 @@ import {
 } from "./server/httpsRedirectPolicy";
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode";
 import { registerApiKeyRoutes } from "./apiKeys/routes";
+import {
+  createLibraryServices,
+  registerLibraryRoutes,
+  seedLibraries,
+  type LibraryPrisma,
+} from "./libraries";
 
 const backendRoot = path.resolve(__dirname, "../");
 console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
@@ -534,6 +540,18 @@ registerApiKeyRoutes(app, {
   apiKeySecret: config.apiKeySecret,
 });
 
+// Curated Excalidraw library packs (foundation for the future MCP server).
+const libraryServices = createLibraryServices({
+  prisma: prisma as unknown as LibraryPrisma,
+  config: config.libraries,
+});
+
+registerLibraryRoutes(app, {
+  requireAuth,
+  asyncHandler,
+  services: libraryServices,
+});
+
 registerDashboardRoutes(app, {
   prisma,
   requireAuth,
@@ -611,6 +629,34 @@ if (isMain) {
     } catch (error) {
       console.error("Failed to issue bootstrap setup code:", error);
     }
+
+    // Curated library packs: always ensure packs exist; optionally refresh the
+    // official catalog + resolve membership in the background. Failures here
+    // (e.g. no network) must never crash startup.
+    try {
+      await libraryServices.packService.seedPacks();
+      if (config.libraries.autoRefreshOnStart) {
+        void seedLibraries({
+          catalogService: libraryServices.catalogService,
+          packService: libraryServices.packService,
+        })
+          .then((result) => {
+            const catalogSummary =
+              "fetched" in result.catalog
+                ? `catalog=${result.catalog.upserted}/${result.catalog.fetched}`
+                : `catalog=skipped (${result.catalog.reason})`;
+            console.log(
+              `[libraries] startup seed: ${catalogSummary} curatedMissing=${result.packs.missing.length}`,
+            );
+          })
+          .catch((error) => {
+            console.error("[libraries] startup seed failed:", error);
+          });
+      }
+    } catch (error) {
+      console.error("[libraries] pack seed failed:", error);
+    }
+
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${config.nodeEnv}`);
     console.log(`Frontend URL: ${config.frontendUrl}`);

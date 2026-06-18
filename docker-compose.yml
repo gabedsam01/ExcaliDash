@@ -51,8 +51,19 @@ services:
       MAX_IMPORT_ARCHIVE_ENTRIES: ${MAX_IMPORT_ARCHIVE_ENTRIES:-10000}
       MAX_IMPORT_COLLECTIONS: ${MAX_IMPORT_COLLECTIONS:-2000}
       MAX_IMPORT_DRAWINGS: ${MAX_IMPORT_DRAWINGS:-10000}
+      # Curated Excalidraw library packs (foundation for the future MCP server).
+      LIBRARY_CACHE_DIR: ${LIBRARY_CACHE_DIR:-/app/data/libraries}
+      LIBRARY_PUBLIC_SEARCH_ENABLED: ${LIBRARY_PUBLIC_SEARCH_ENABLED:-true}
+      LIBRARY_AUTO_REFRESH_ON_START: ${LIBRARY_AUTO_REFRESH_ON_START:-true}
+      LIBRARY_REFRESH_INTERVAL_HOURS: ${LIBRARY_REFRESH_INTERVAL_HOURS:-24}
+      LIBRARY_DOWNLOAD_TIMEOUT_MS: ${LIBRARY_DOWNLOAD_TIMEOUT_MS:-15000}
+      LIBRARY_DOWNLOAD_MAX_MB: ${LIBRARY_DOWNLOAD_MAX_MB:-25}
+      LIBRARY_PUBLIC_SEARCH_MAX_RESULTS: ${LIBRARY_PUBLIC_SEARCH_MAX_RESULTS:-25}
+      EXCALIDRAW_LIBRARIES_CATALOG_URL: ${EXCALIDRAW_LIBRARIES_CATALOG_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json}
+      EXCALIDRAW_LIBRARIES_BASE_URL: ${EXCALIDRAW_LIBRARIES_BASE_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries}
     volumes:
       - backend-data:/app/prisma
+      - library-data:/app/data
     networks:
       - excalidash-network
     restart: unless-stopped
@@ -109,4 +120,5 @@ networks:
 
 volumes:
   backend-data:
+  library-data:
   postgres_data:

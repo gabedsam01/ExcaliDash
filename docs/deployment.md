@@ -130,6 +130,35 @@ the reverse-proxy behavior described in this document. `MAX_UPLOAD_MB`,
 all reverse-proxy sections below (External Nginx, Caddy, Traefik, Cloudflare
 Tunnel, and the Coolify/Easypanel/Dokploy panels) remain exactly as documented.
 
+## Library cache (curated packs)
+
+The curated Excalidraw library packs store metadata in PostgreSQL and cache
+downloaded `.excalidrawlib` files on disk under `LIBRARY_CACHE_DIR` (default
+`/app/data/libraries`). The bundled `docker-compose.yml` mounts a named
+`library-data` volume at `/app/data` so the cache survives restarts; it is
+dropped by `docker compose down -v` along with the other named volumes.
+
+Outbound network egress to `raw.githubusercontent.com` is required for the
+catalog refresh and for caching libraries. The host allowlist is hard-coded
+(only the official Excalidraw catalog path over HTTPS), so no other destinations
+are reachable regardless of the env values. To run fully offline, set
+`LIBRARY_AUTO_REFRESH_ON_START=false`; the curated pack rows are still created,
+they just have no resolved members until a successful `POST /api/libraries/refresh`.
+
+Relevant variables (see also `.env.example`):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LIBRARY_CACHE_DIR` | `/app/data/libraries` | where cached `.excalidrawlib` files are written |
+| `LIBRARY_DOWNLOAD_MAX_MB` | `25` | per-file download size cap |
+| `LIBRARY_DOWNLOAD_TIMEOUT_MS` | `15000` | per-request timeout |
+| `LIBRARY_PUBLIC_SEARCH_ENABLED` | `true` | enable/disable PUBLIC_SEARCH |
+| `LIBRARY_PUBLIC_SEARCH_MAX_RESULTS` | `25` | cap on public results |
+| `LIBRARY_REFRESH_INTERVAL_HOURS` | `24` | advisory refresh cadence |
+| `LIBRARY_AUTO_REFRESH_ON_START` | `true` | refresh catalog + reseed on startup |
+| `EXCALIDRAW_LIBRARIES_CATALOG_URL` | official catalog | catalog JSON URL (allowlisted host only) |
+| `EXCALIDRAW_LIBRARIES_BASE_URL` | official base | library file base URL (allowlisted host only) |
+
 ## External Nginx
 
 ```nginx

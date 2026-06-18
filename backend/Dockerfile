@@ -55,7 +55,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/generated ./dist/generated
 
 # Create necessary directories (ownership will be set in entrypoint)
-RUN mkdir -p /app/uploads /app/prisma
+# /app/data holds the cached .excalidrawlib library files (LIBRARY_CACHE_DIR).
+RUN mkdir -p /app/uploads /app/prisma /app/data
 
 # Copy and set permissions for entrypoint script
 COPY docker-entrypoint.sh ./

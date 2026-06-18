@@ -202,3 +202,75 @@ model AuthIdentity {
   @@unique([provider, userId])
   @@index([userId])
 }
+
+// --- Excalidraw library management (curated packs + official catalog) -------
+// Catalog metadata mirrors the official excalidraw-libraries catalog. Raw
+// `.excalidrawlib` blobs are NOT stored here — only metadata + a cache pointer
+// (cachePath) into the backend persistent volume.
+
+model ExcalidrawLibraryCatalogItem {
+  id               String    @id @default(cuid())
+  officialId       String?   @unique
+  name             String
+  slug             String    @unique
+  description      String?
+  source           String    @unique
+  preview          String?
+  version          Int?
+  authors          Json?
+  itemNames        Json?
+  createdDate      DateTime?
+  updatedDate      DateTime?
+  isCurated        Boolean   @default(false)
+  isAvailable      Boolean   @default(true)
+  lastFetchedAt    DateTime?
+  cachedAt         DateTime?
+  cachePath        String?
+  previewCachePath String?
+  sha256           String?
+  sizeBytes        Int?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  packItems        ExcalidrawLibraryPackItem[]
+
+  @@index([isCurated])
+  @@index([name])
+}
+
+model ExcalidrawLibraryPack {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  kind        String // CORE, SPECIALIZED
+  category    String?
+  parentSlug  String?
+  isSystem    Boolean  @default(true)
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       ExcalidrawLibraryPackItem[]
+
+  @@index([kind])
+  @@index([parentSlug])
+}
+
+model ExcalidrawLibraryPackItem {
+  packId    String
+  libraryId String
+  priority  Int      @default(0)
+  aliases   Json?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  pack      ExcalidrawLibraryPack         @relation(fields: [packId], references: [id], onDelete: Cascade)
+  library   ExcalidrawLibraryCatalogItem  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+
+  @@id([packId, libraryId])
+  @@index([libraryId])
+}

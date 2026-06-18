@@ -453,6 +453,84 @@ persists a value in `/app/prisma/.api_key_secret` when the variable is omitted.
 Set it explicitly for portable backups or deployments with more than one
 backend instance.
 
+## Diagram Libraries (Curated Packs)
+
+ExcaliDash ships a persisted, API-accessible **library management** layer that
+the future MCP server uses to produce visually consistent diagrams. It mirrors
+the [official Excalidraw libraries catalog](https://github.com/excalidraw/excalidraw-libraries)
+into PostgreSQL (metadata only) and caches downloaded `.excalidrawlib` files on
+a backend volume. **Settings → Diagram Libraries** exposes status, search, and
+caching. There are three access modes:
+
+- **CORE_PACK** — the default, always-preferred curated set (architecture,
+  cloud, logos, people, UI/wireframe basics). Used when no category is
+  requested; no public result can outrank it.
+- **SPECIALIZED_PACK** — a curated family of nine categories:
+  `architecture_advanced`, `cloud_devops`, `data_observability`, `logos_tech`,
+  `people_storytelling`, `ui_wireframe`, `security`, `ai_mcp`,
+  `business_product`. A library may belong to several categories, and category
+  aliases work (e.g. `cloud`, `devops`, `aws`, `gcp`, `azure`, `k8s`).
+- **PUBLIC_SEARCH** — searches the full official Excalidraw catalog. Results are
+  flagged as **not curated** and ranked below curated matches unless
+  `mode=public` is explicit. Disable it with
+  `LIBRARY_PUBLIC_SEARCH_ENABLED=false`.
+
+### Security
+
+Public search means the **official Excalidraw catalog only** — not the open
+internet. The backend hard-codes an allowlist (`raw.githubusercontent.com` under
+`/excalidraw/excalidraw-libraries/main/...`, HTTPS only) and rejects absolute
+external URLs, `..`/path traversal, oversized files (`LIBRARY_DOWNLOAD_MAX_MB`),
+and non-`.excalidrawlib` payloads. Downloads happen only when a client
+explicitly asks to cache/inspect a library; nothing is fetched ahead of time
+beyond the catalog metadata.
+
+### Refresh behavior
+
+On startup the backend ensures the curated packs exist and (when
+`LIBRARY_AUTO_REFRESH_ON_START=true`) refreshes the catalog and resolves pack
+membership in the background. The work is idempotent and never blocks or crashes
+startup — a name missing from the catalog (e.g. `Docker`) is logged, not fatal.
+`POST /api/libraries/refresh` re-runs the same flow on demand.
+
+### Cache persistence
+
+Cached `.excalidrawlib` files live under `LIBRARY_CACHE_DIR` (default
+`/app/data/libraries`), backed by the `library-data` Docker volume. Only
+metadata, checksums (sha256), and a cache pointer are stored in PostgreSQL.
+
+### Environment variables
+
+```env
+EXCALIDRAW_LIBRARIES_CATALOG_URL=https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json
+EXCALIDRAW_LIBRARIES_BASE_URL=https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries
+LIBRARY_CACHE_DIR=/app/data/libraries
+LIBRARY_REFRESH_INTERVAL_HOURS=24
+LIBRARY_DOWNLOAD_TIMEOUT_MS=15000
+LIBRARY_DOWNLOAD_MAX_MB=25
+LIBRARY_PUBLIC_SEARCH_ENABLED=true
+LIBRARY_PUBLIC_SEARCH_MAX_RESULTS=25
+LIBRARY_AUTO_REFRESH_ON_START=true
+```
+
+### API endpoints
+
+All endpoints require authentication (consistent with the rest of the app).
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /api/libraries/status` | catalog/curated counts, last refresh, cache dir, public-search flag |
+| `POST /api/libraries/refresh` | refresh the official catalog and reseed packs (idempotent) |
+| `GET /api/libraries/packs` | core + specialized categories with item counts |
+| `GET /api/libraries/packs/:slug` | one pack with its libraries |
+| `GET /api/libraries/search?q=&mode=core\|specialized\|public\|all&category=&limit=` | mode-aware search; results carry `sourceMode` and `curated` |
+| `GET /api/libraries/:id` | normalized metadata + cache status for one library |
+| `POST /api/libraries/:id/cache` | download + cache the `.excalidrawlib`; returns `itemCount`, `sha256`, `sizeBytes` |
+| `GET /api/libraries/:id/items` | ensure cached and return bounded item names |
+
+The actual `/mcp` server is not implemented here — this is the library
+infrastructure it will build on.
+
 # Development
 
 For contributor workflow, `make dev` starts the app in local single-user mode so you can reproduce editor bugs without going through login/onboarding. Use `make dev-auth` if you need to test local auth or OIDC flows from your `backend/.env`.

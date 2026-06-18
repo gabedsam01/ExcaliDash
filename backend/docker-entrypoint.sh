@@ -88,9 +88,12 @@ cp -R /app/prisma_template/migrations/. /app/prisma/migrations/
 
 # 2. Fix permissions unconditionally (Running as root)
 echo "Fixing filesystem permissions..."
+mkdir -p /app/data
 chown -R nodejs:nodejs /app/uploads
 chown -R nodejs:nodejs /app/prisma
+chown -R nodejs:nodejs /app/data
 chmod 755 /app/uploads
+chmod 755 /app/data
 chmod 600 "${JWT_SECRET_FILE}"
 chmod 600 "${CSRF_SECRET_FILE}"
 chmod 600 "${API_KEY_SECRET_FILE}"
