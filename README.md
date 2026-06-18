@@ -19,6 +19,7 @@ A self-hosted dashboard and organizer for [Excalidraw](https://github.com/excali
   - [Advanced](#advanced)
 - [Deployment and reverse proxies](#deployment-and-reverse-proxies)
 - [API Keys for MCP clients](#api-keys-for-mcp-clients)
+- [ExcaliDash MCP Server](#excalidash-mcp-server)
 - [Development](#development)
 - [Credits](#credits)
 
@@ -428,8 +429,7 @@ credentials for future MCP integrations. Tokens use the `exd_` prefix, are
 shown once at creation time, and are never stored in plaintext. Afterward,
 ExcaliDash returns only a masked preview.
 
-The actual `/mcp` server is not implemented yet. The UI prepares credentials
-and client configuration for use when that endpoint is enabled.
+The MCP server is **live** at `/mcp` (see [ExcaliDash MCP Server](#excalidash-mcp-server)).
 
 Claude Code example:
 
@@ -452,6 +452,108 @@ placeholder and is rejected in production. The Docker entrypoint generates and
 persists a value in `/app/prisma/.api_key_secret` when the variable is omitted.
 Set it explicitly for portable backups or deployments with more than one
 backend instance.
+
+## ExcaliDash MCP Server
+
+ExcaliDash ships a real **MCP server at `/mcp`** so an external agent (Claude
+Code, or any MCP client) can create, edit, validate, repair, version, export and
+save professional Excalidraw diagrams in the authenticated user's workspace. The
+LLM stays external — the MCP only executes **exactly 25 deterministic tools**.
+
+### Connecting
+
+Authenticate with a Bearer `exd_` [API key](#api-keys-for-mcp-clients):
+
+```bash
+# scope: local | project | user
+claude mcp add --transport http --scope local excalidash https://your-domain/mcp \
+  --header "Authorization: Bearer exd_YOUR_TOKEN"
+```
+
+Other clients:
+
+```json
+{
+  "mcpServers": {
+    "excalidash": {
+      "type": "http",
+      "url": "https://your-domain/mcp",
+      "headers": { "Authorization": "Bearer exd_YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+### The 25 tools
+
+| Group | Tools |
+| --- | --- |
+| Core (9) | `read_mcp_guide`, `create_drawing`, `create_diagram_from_prompt`, `update_drawing`, `get_drawing`, `save_drawing`, `save_version`, `get_drawing_url`, `export_drawing` |
+| Libraries (5) | `search_libraries`, `inspect_library`, `cache_library`, `add_library_items`, `add_library_items_normalized` |
+| Quality (4) | `lint_drawing`, `score_drawing`, `repair_drawing`, `auto_polish_drawing` |
+| Architecture (4) | `create_from_repo_analysis`, `apply_architecture_skill`, `validate_architecture`, `suggest_architecture_improvements` |
+| Templates (3) | `list_templates`, `create_from_template`, `convert_diagram_type` |
+
+Start every session with `read_mcp_guide`.
+
+### Quality flow (geometry-validated)
+
+Generation is backed by a **geometry engine** (bounding boxes, intersection,
+text/element containment, minimum distance, grid snapping, font size, arrow
+binding, density, viewport). Diagrams go through **lint → score (0-100) →
+repair → auto-polish**. The default passing bar is **`MCP_MIN_DRAWING_SCORE=95`**;
+`save_drawing` will not save below the bar unless `asDraft` (and
+`MCP_ALLOW_LOW_SCORE_DRAFT`) is set. `auto_polish_drawing` loops up to
+`MCP_MAX_REPAIR_ATTEMPTS`.
+
+- **Presets**: `handdrawn-clean`, `technical-docs`, `startup-deck`,
+  `dark-architecture`, `minimal-whiteboard`, `portfolio-polished`.
+- **Templates**: C4 (context/container), clean & hexagonal architecture, MCP
+  server, API flow, n8n workflow, database schema, sequence, swimlane, security
+  boundary, UI dashboard wireframe, portfolio architecture.
+- **Architecture patterns** (`apply_architecture_skill`): clean, hexagonal, ddd,
+  c4, cqrs, event-driven, microservices, modular-monolith, mcp.
+- **Skills**: versioned guidance files under `backend/src/mcp/skills/`.
+
+### Libraries
+
+MCP library tools reuse the curated [library packs](#diagram-libraries-curated-packs):
+prefer CORE/SPECIALIZED, cache on demand (`cache_library`, official allowlisted
+source only), and normalize imports with `add_library_items_normalized`.
+
+### Security
+
+- Every request requires `Authorization: Bearer exd_...`; tokens are verified by
+  HMAC, never stored or logged in plaintext, and revoked keys are rejected.
+- Each key only accesses **its owner's** drawings, libraries and exports.
+- `/mcp` has a dedicated rate limit (`MCP_RATE_LIMIT_MAX` per
+  `MCP_RATE_LIMIT_WINDOW_SECONDS`) and optional Origin validation
+  (`MCP_VALIDATE_ORIGIN`), and is exempt from cookie-CSRF (it is not
+  cookie-authenticated).
+
+### Export
+
+`export_drawing` produces `.excalidraw` and **SVG** server-side. **PNG** has no
+headless rasterizer in this stack, so it returns a structured fallback (export
+SVG, or open the editable URL and export PNG from the Excalidraw client) rather
+than failing.
+
+### Environment variables
+
+```env
+MCP_ENABLED=true
+MCP_ENDPOINT_PATH=/mcp
+MCP_MIN_DRAWING_SCORE=95
+MCP_MAX_REPAIR_ATTEMPTS=5
+MCP_ALLOW_LOW_SCORE_DRAFT=true
+MCP_MAX_ELEMENTS=5000
+MCP_MAX_EXPORT_MB=100
+MCP_DEFAULT_LIBRARY_MODE=curated
+MCP_PUBLIC_SEARCH_ENABLED=false
+MCP_RATE_LIMIT_WINDOW_SECONDS=900
+MCP_RATE_LIMIT_MAX=300
+MCP_VALIDATE_ORIGIN=true
+```
 
 ## Diagram Libraries (Curated Packs)
 

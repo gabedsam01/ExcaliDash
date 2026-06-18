@@ -44,6 +44,7 @@ import {
   seedLibraries,
   type LibraryPrisma,
 } from "./libraries";
+import { registerMcpServer } from "./mcp";
 
 const backendRoot = path.resolve(__dirname, "../");
 console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
@@ -312,6 +313,16 @@ const generalRateLimiter = rateLimit({
 });
 
 app.use(generalRateLimiter);
+
+// ExcaliDash MCP server (/mcp). Mounted BEFORE CSRF: it is Bearer-API-key
+// authenticated (no cookies), has its own rate limiter and Origin validation,
+// and must not be subject to cookie-based CSRF or the onboarding gate.
+registerMcpServer(app, {
+  prisma,
+  config,
+  isAllowedOrigin,
+  serverVersion: getBackendVersion(),
+});
 
 registerCsrfProtection({
   app,

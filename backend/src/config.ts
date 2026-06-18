@@ -9,6 +9,7 @@ import {
   summarizeRequestLimits,
 } from "./utils/limits";
 import type { LibraryConfig } from "./libraries/types";
+import type { McpConfig } from "./mcp/types";
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ interface Config {
   bootstrapSetupCodeMaxAttempts: number;
   limits: RequestLimits;
   libraries: LibraryConfig;
+  mcp: McpConfig;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced";
@@ -370,6 +372,63 @@ const resolveLibraryConfig = (): LibraryConfig => {
   };
 };
 
+/**
+ * ExcaliDash MCP server configuration. The MCP exposes exactly 25 drawing tools
+ * at MCP_ENDPOINT_PATH, authenticated by Bearer `exd_` API keys.
+ */
+const resolveMcpConfig = (): McpConfig => {
+  const clampScore = (key: string, fallback: number): number => {
+    const raw = process.env[key];
+    if (!raw) return fallback;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      throw new Error(`Invalid ${key}: must be a number between 0 and 100`);
+    }
+    return Math.max(0, Math.min(100, Math.trunc(parsed)));
+  };
+
+  const allowedLibraryModes = new Set([
+    "curated",
+    "all",
+    "core",
+    "specialized",
+    "public",
+  ]);
+  const libraryMode = getOptionalEnv(
+    "MCP_DEFAULT_LIBRARY_MODE",
+    "curated",
+  ).trim();
+  if (!allowedLibraryModes.has(libraryMode)) {
+    throw new Error(
+      `Invalid MCP_DEFAULT_LIBRARY_MODE: must be one of ${Array.from(
+        allowedLibraryModes,
+      ).join(", ")}`,
+    );
+  }
+
+  let endpointPath = getOptionalEnv("MCP_ENDPOINT_PATH", "/mcp").trim();
+  if (!endpointPath.startsWith("/")) endpointPath = `/${endpointPath}`;
+  endpointPath = endpointPath.replace(/\/+$/, "") || "/mcp";
+
+  return {
+    enabled: getOptionalBoolean("MCP_ENABLED", true),
+    endpointPath,
+    minDrawingScore: clampScore("MCP_MIN_DRAWING_SCORE", 95),
+    maxRepairAttempts: getRequiredEnvNumber("MCP_MAX_REPAIR_ATTEMPTS", 5),
+    allowLowScoreDraft: getOptionalBoolean("MCP_ALLOW_LOW_SCORE_DRAFT", true),
+    maxElements: getRequiredEnvNumber("MCP_MAX_ELEMENTS", 5000),
+    maxExportMb: getRequiredEnvNumber("MCP_MAX_EXPORT_MB", 100),
+    defaultLibraryMode: libraryMode as McpConfig["defaultLibraryMode"],
+    publicSearchEnabled: getOptionalBoolean("MCP_PUBLIC_SEARCH_ENABLED", false),
+    rateLimitWindowSeconds: getRequiredEnvNumber(
+      "MCP_RATE_LIMIT_WINDOW_SECONDS",
+      900,
+    ),
+    rateLimitMax: getRequiredEnvNumber("MCP_RATE_LIMIT_MAX", 300),
+    validateOrigin: getOptionalBoolean("MCP_VALIDATE_ORIGIN", true),
+  };
+};
+
 const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 
@@ -404,6 +463,7 @@ export const config: Config = {
   ),
   limits: loadRequestLimits(),
   libraries: resolveLibraryConfig(),
+  mcp: resolveMcpConfig(),
 };
 
 if (config.nodeEnv === "production") {

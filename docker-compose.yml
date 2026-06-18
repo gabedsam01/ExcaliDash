@@ -61,6 +61,19 @@ services:
       LIBRARY_PUBLIC_SEARCH_MAX_RESULTS: ${LIBRARY_PUBLIC_SEARCH_MAX_RESULTS:-25}
       EXCALIDRAW_LIBRARIES_CATALOG_URL: ${EXCALIDRAW_LIBRARIES_CATALOG_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json}
       EXCALIDRAW_LIBRARIES_BASE_URL: ${EXCALIDRAW_LIBRARIES_BASE_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries}
+      # ExcaliDash MCP server (/mcp): 25 drawing tools, Bearer exd_ auth.
+      MCP_ENABLED: ${MCP_ENABLED:-true}
+      MCP_ENDPOINT_PATH: ${MCP_ENDPOINT_PATH:-/mcp}
+      MCP_MIN_DRAWING_SCORE: ${MCP_MIN_DRAWING_SCORE:-95}
+      MCP_MAX_REPAIR_ATTEMPTS: ${MCP_MAX_REPAIR_ATTEMPTS:-5}
+      MCP_ALLOW_LOW_SCORE_DRAFT: ${MCP_ALLOW_LOW_SCORE_DRAFT:-true}
+      MCP_MAX_ELEMENTS: ${MCP_MAX_ELEMENTS:-5000}
+      MCP_MAX_EXPORT_MB: ${MCP_MAX_EXPORT_MB:-100}
+      MCP_DEFAULT_LIBRARY_MODE: ${MCP_DEFAULT_LIBRARY_MODE:-curated}
+      MCP_PUBLIC_SEARCH_ENABLED: ${MCP_PUBLIC_SEARCH_ENABLED:-false}
+      MCP_RATE_LIMIT_WINDOW_SECONDS: ${MCP_RATE_LIMIT_WINDOW_SECONDS:-900}
+      MCP_RATE_LIMIT_MAX: ${MCP_RATE_LIMIT_MAX:-300}
+      MCP_VALIDATE_ORIGIN: ${MCP_VALIDATE_ORIGIN:-true}
     volumes:
       - backend-data:/app/prisma
       - library-data:/app/data

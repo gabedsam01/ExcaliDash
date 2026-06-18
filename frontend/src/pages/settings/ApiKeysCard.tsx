@@ -205,8 +205,9 @@ export const ApiKeysCard: React.FC = () => {
             MCP / API Keys
           </h2>
           <p className="mt-1 text-sm font-medium text-slate-600 dark:text-neutral-400">
-            Create and manage API keys for external MCP clients. Use these keys
-            with the ExcaliDash MCP endpoint when MCP is enabled.
+            Create and manage API keys for external MCP clients. The ExcaliDash
+            MCP server is live at <code>/mcp</code> with 25 drawing tools — use a
+            key below as the Bearer token to connect Claude Code or any MCP client.
           </p>
         </div>
       </div>
