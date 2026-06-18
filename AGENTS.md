@@ -19,7 +19,7 @@ Core user-facing features include organizing drawings into collections, search, 
   - Pre-release tags are published as `:dev` and `:<VERSION>-dev` (and do not update `:latest`).
   - Set fixed `JWT_SECRET` and `CSRF_SECRET` for portability and multi-instance/redeploy scenarios.
   - Set `FRONTEND_URL` to your public URL(s) and keep `TRUST_PROXY=false` unless you are behind a trusted proxy hop.
-  - Ensure the backend volume is backed up (SQLite DB + persisted secrets).
+  - Ensure backups cover the PostgreSQL database (`pg_dump`) and the persisted secrets volume.
 - Re-check production health:
   - `docker compose -f docker-compose.prod.yml ps`
   - `docker compose -f docker-compose.prod.yml logs backend --tail=200`
@@ -158,7 +158,7 @@ Dependencies:
 
 - Node.js 20+
 - npm
-- SQLite-supported environment (default)
+- PostgreSQL (local via the Docker Compose `postgres` service, or an external/managed PostgreSQL). `make dev` and the dev backend now require a running PostgreSQL.
 - Docker + Docker Compose if using compose path
 
 Install:
@@ -172,8 +172,9 @@ Start backend + frontend in tmux:
 - Backend dev env:
   - `cd backend`
   - `cp .env.example .env`
+  - start a local PostgreSQL: `docker compose up -d postgres`
   - `npx prisma generate`
-  - `npx prisma db push`
+  - `npx prisma migrate dev`
   - `npm run dev`
 - Frontend dev env:
   - `cd frontend`
@@ -212,7 +213,7 @@ Backend base variables:
 
 - `PORT` (default `8000`)
 - `NODE_ENV` (`development` / `production`)
-- `DATABASE_URL` (`file:...` default via `backend/.env` and resolver)
+- `DATABASE_URL` (PostgreSQL connection string, e.g. `postgresql://user:pass@postgres:5432/excalidash?schema=public`; host is the `postgres` compose service, or `localhost` for a host-run dev backend)
 - `FRONTEND_URL` (comma-separated allowed origins)
 - `TRUST_PROXY` (`true`, `false`, or positive hop count)
 - `AUTH_MODE` (`local`, `hybrid`, `oidc_enforced`)

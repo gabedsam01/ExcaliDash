@@ -96,7 +96,6 @@ export type RegisterImportExportDeps = {
   ) => Promise<void>;
   invalidateDrawingsCache: () => void;
   removeFileIfExists: (filePath?: string) => Promise<void>;
-  verifyDatabaseIntegrityAsync: (filePath: string) => Promise<boolean>;
   limits: RequestLimits;
 };
 
@@ -188,15 +187,6 @@ export const toPublicTrashCollectionId = (
 ): string | null =>
   isTrashCollectionId(collectionId, userId) ? "trash" : collectionId ?? null;
 
-export const findSqliteTable = (tables: string[], candidates: string[]): string | null => {
-  const byLower = new Map(tables.map((t) => [t.toLowerCase(), t]));
-  for (const candidate of candidates) {
-    const found = byLower.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-  return null;
-};
-
 export const parseOptionalJson = <T>(raw: unknown, fallback: T): T => {
   if (typeof raw === "string") {
     try {
@@ -246,39 +236,6 @@ export const resolveSafeUploadedFilePath = async (
   }
 
   return joinedPath;
-};
-
-export const openReadonlySqliteDb = (filePath: string): any => {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DatabaseSync } = require("node:sqlite") as any;
-    return new DatabaseSync(filePath, {
-      readOnly: true,
-      enableForeignKeyConstraints: false,
-    });
-  } catch {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Database = require("better-sqlite3") as any;
-    return new Database(filePath, { readonly: true, fileMustExist: true });
-  }
-};
-
-export const getCurrentLatestPrismaMigrationName = async (
-  backendRoot: string
-): Promise<string | null> => {
-  try {
-    const migrationsDir = path.resolve(backendRoot, "prisma/migrations");
-    const entries = await fsPromises.readdir(migrationsDir, { withFileTypes: true });
-    const dirs = entries
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name)
-      .filter((name) => !name.startsWith("."));
-    if (dirs.length === 0) return null;
-    dirs.sort();
-    return dirs[dirs.length - 1] || null;
-  } catch {
-    return null;
-  }
 };
 
 export { sanitizeDrawingData };

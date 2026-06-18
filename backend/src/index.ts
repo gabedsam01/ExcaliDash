@@ -5,7 +5,6 @@ import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { Worker } from "worker_threads";
 import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
@@ -202,17 +201,6 @@ const upload = multer({
   limits: {
     fileSize: config.limits.upload.bytes,
     files: 1,
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.fieldname === "db") {
-      const isSqliteDb =
-        file.originalname.endsWith(".db") ||
-        file.originalname.endsWith(".sqlite");
-      if (!isSqliteDb) {
-        return cb(new Error("Only .db or .sqlite files are allowed"));
-      }
-    }
-    cb(null, true);
   },
 });
 
@@ -447,79 +435,6 @@ const respondWithValidationErrors = (
 
 const collectionNameSchema = z.string().trim().min(1).max(100);
 
-const validateSqliteHeader = (filePath: string): boolean => {
-  try {
-    const buffer = Buffer.alloc(16);
-    const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
-
-    if (bytesRead < 16) {
-      console.warn("File too small to be a valid SQLite database");
-      return false;
-    }
-
-    const expectedHeader = Buffer.from([
-      0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61,
-      0x74, 0x20, 0x33, 0x00,
-    ]);
-
-    const isValid = buffer.equals(expectedHeader);
-    if (!isValid) {
-      console.warn("Invalid SQLite file header detected", {
-        filePath,
-        header: buffer.toString("hex"),
-        expected: expectedHeader.toString("hex"),
-      });
-    }
-
-    return isValid;
-  } catch (error) {
-    console.error("Failed to validate SQLite header:", error);
-    return false;
-  }
-};
-const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
-  if (!validateSqliteHeader(filePath)) {
-    return Promise.resolve(false);
-  }
-
-  return new Promise((resolve) => {
-    const worker = new Worker(
-      path.resolve(__dirname, "./workers/db-verify.js"),
-      {
-        workerData: { filePath },
-      }
-    );
-    let timeoutHandle: NodeJS.Timeout;
-    let settled = false;
-
-    const finish = (result: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      resolve(result);
-    };
-
-    worker.on("message", (isValid: boolean) => finish(isValid));
-    worker.on("error", (err) => {
-      console.error("Worker error:", err);
-      finish(false);
-    });
-    worker.on("exit", (code) => {
-      if (code !== 0) {
-        finish(false);
-      }
-    });
-
-    timeoutHandle = setTimeout(() => {
-      console.warn("Integrity check worker timed out", { filePath });
-      worker.terminate();
-      finish(false);
-    }, 10000);
-  });
-};
-
 const removeFileIfExists = async (filePath?: string) => {
   if (!filePath) return;
   try {
@@ -648,7 +563,6 @@ registerImportExportRoutes({
   ensureTrashCollection,
   invalidateDrawingsCache,
   removeFileIfExists,
-  verifyDatabaseIntegrityAsync,
   limits: config.limits,
 });
 

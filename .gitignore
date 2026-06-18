@@ -3,20 +3,7 @@ frontend/node_modules
 backend/node_modules
 
 # Database
-backend/prisma/*.db
-backend/prisma/**/*.db
-backend/prisma/*.db-journal
-backend/prisma/**/*.db-journal
-backend/prisma/dev.db
-backend/prisma/e2e-test.db
 backend/prisma/*.backup
-
-# SQLite artifacts anywhere (avoid committing dev DBs)
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-*.db.backup
 
 # Docker-entrypoint persisted secrets/locks (in case prisma volume is bind-mounted)
 backend/prisma/.jwt_secret

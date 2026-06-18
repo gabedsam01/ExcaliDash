@@ -10,7 +10,22 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-    
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: excalidash_test
+          POSTGRES_USER: excalidash
+          POSTGRES_PASSWORD: excalidash
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U excalidash -d excalidash_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
       
@@ -35,6 +50,8 @@ jobs:
         run: |
           cd backend
           npm test
+        env:
+          DATABASE_URL: postgresql://excalidash:excalidash@localhost:5432/excalidash_test?schema=public
 
   frontend-unit-tests:
     name: Frontend Unit Tests
@@ -63,7 +80,22 @@ jobs:
   e2e-tests:
     name: E2E Browser Tests
     runs-on: ubuntu-latest
-    
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: excalidash_test
+          POSTGRES_USER: excalidash
+          POSTGRES_PASSWORD: excalidash
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U excalidash -d excalidash_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
       
@@ -87,7 +119,7 @@ jobs:
           cd backend
           npx prisma migrate deploy
         env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
+          DATABASE_URL: postgresql://excalidash:excalidash@localhost:5432/excalidash_test?schema=public
       
       - name: Install frontend dependencies
         run: |
@@ -108,7 +140,7 @@ jobs:
         run: |
           # Start backend server in background
           cd backend
-          DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" npm run dev &
+          DATABASE_URL="postgresql://excalidash:excalidash@localhost:5432/excalidash_test?schema=public" FRONTEND_URL="http://localhost:6767" npm run dev &
           BACKEND_PID=$!
           cd ..
           
@@ -150,7 +182,7 @@ jobs:
           
           exit $TEST_EXIT_CODE
         env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
+          DATABASE_URL: postgresql://excalidash:excalidash@localhost:5432/excalidash_test?schema=public
       
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

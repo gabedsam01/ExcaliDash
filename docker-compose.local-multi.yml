@@ -13,12 +13,32 @@ services:
       - oidc-shared-net
     restart: unless-stopped
 
+  postgres-basic:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: excalidash
+      POSTGRES_USER: excalidash
+      POSTGRES_PASSWORD: excalidash_local_pw
+    volumes:
+      - postgres-basic-data:/var/lib/postgresql/data
+    networks:
+      - basic-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excalidash -d excalidash"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend-basic:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    depends_on:
+      postgres-basic:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://excalidash:excalidash_local_pw@postgres-basic:5432/excalidash?schema=public
       - PORT=8000
       - NODE_ENV=production
       - AUTH_MODE=local
@@ -46,12 +66,29 @@ services:
       - basic-net
     restart: unless-stopped
 
+  postgres-oidc:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: excalidash
+      POSTGRES_USER: excalidash
+      POSTGRES_PASSWORD: excalidash_local_pw
+    volumes:
+      - postgres-oidc-data:/var/lib/postgresql/data
+    networks:
+      - oidc-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excalidash -d excalidash"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend-oidc:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://excalidash:excalidash_local_pw@postgres-oidc:5432/excalidash?schema=public
       - PORT=8000
       - NODE_ENV=development
       - AUTH_MODE=oidc_enforced
@@ -68,7 +105,10 @@ services:
     volumes:
       - backend-oidc-data:/app/prisma
     depends_on:
-      - keycloak
+      keycloak:
+        condition: service_started
+      postgres-oidc:
+        condition: service_healthy
     networks:
       - oidc-net
       - oidc-shared-net
@@ -88,12 +128,29 @@ services:
       - oidc-net
     restart: unless-stopped
 
+  postgres-hybrid:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: excalidash
+      POSTGRES_USER: excalidash
+      POSTGRES_PASSWORD: excalidash_local_pw
+    volumes:
+      - postgres-hybrid-data:/var/lib/postgresql/data
+    networks:
+      - hybrid-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excalidash -d excalidash"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend-hybrid:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://excalidash:excalidash_local_pw@postgres-hybrid:5432/excalidash?schema=public
       - PORT=8000
       - NODE_ENV=development
       - AUTH_MODE=hybrid
@@ -110,7 +167,10 @@ services:
     volumes:
       - backend-hybrid-data:/app/prisma
     depends_on:
-      - keycloak
+      keycloak:
+        condition: service_started
+      postgres-hybrid:
+        condition: service_healthy
     networks:
       - hybrid-net
       - oidc-shared-net
@@ -144,3 +204,6 @@ volumes:
   backend-basic-data:
   backend-oidc-data:
   backend-hybrid-data:
+  postgres-basic-data:
+  postgres-oidc-data:
+  postgres-hybrid-data:

@@ -14,7 +14,7 @@ Release date: 2026-04-17
 
 ### Data safety checklist
 
-- Back up backend volume (`dev.db`, secrets) before upgrading.
+- Back up your PostgreSQL database (e.g. `pg_dump`) and the backend secrets volume before upgrading.
 - Let migrations run on startup (`RUN_MIGRATIONS=true`) for normal deploys.
 - Run `docker compose -f docker-compose.prod.yml logs backend --tail=200` after rollout and verify startup/migration status.
 

@@ -51,8 +51,9 @@ fi
 export CSRF_SECRET
 
 # 1. Ensure schema and migrations are present (Running as root)
-# Never copy the entire prisma directory, as that can unintentionally overwrite
-# persisted SQLite files or copy stray *.db artifacts into the volume.
+# /app/prisma now only holds the Prisma schema/migrations and the persisted
+# JWT/CSRF secrets (no database file lives here). Copy individual files rather
+# than the whole prisma directory so the persisted secrets are never clobbered.
 if [ ! -f "/app/prisma/schema.prisma" ]; then
     echo "Mount appears empty (missing schema.prisma). Bootstrapping schema and migrations..."
 else
@@ -72,18 +73,13 @@ chmod 755 /app/uploads
 chmod 600 "${JWT_SECRET_FILE}"
 chmod 600 "${CSRF_SECRET_FILE}"
 
-# Ensure database file has proper permissions
-if [ -f "/app/prisma/dev.db" ]; then
-    echo "Database file found, ensuring write permissions..."
-    chmod 600 /app/prisma/dev.db
-fi
-
 # 3. Run Migrations (Drop privileges to nodejs)
-# SQLite + multi-replica note:
-# - Running migrations concurrently against the same SQLite file can fail.
-# - This lock coordinates startup when multiple containers share the same volume.
-# - For Kubernetes, the safest pattern is still: run migrations once via a Job/init container
-#   and set RUN_MIGRATIONS=false on the main deployment.
+# Multi-replica note:
+# - Running migrations concurrently from several replicas can race against each other.
+# - This lock serializes startup when multiple containers share the same prisma volume.
+# - For multi-replica deployments, the safest pattern is still: run migrations once
+#   (e.g. via a Job/init container) against the shared PostgreSQL database and set
+#   RUN_MIGRATIONS=false on the remaining replicas.
 if [ "${RUN_MIGRATIONS}" = "true" ] || [ "${RUN_MIGRATIONS}" = "1" ]; then
     echo "Running database migrations..."
 

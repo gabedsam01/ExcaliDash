@@ -1,8 +1,32 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-excalidash}
+      POSTGRES_USER: ${POSTGRES_USER:-excalidash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_strong_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - excalidash-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-excalidash} -d ${POSTGRES_DB:-excalidash}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     image: ${EXCALIDASH_BACKEND_IMAGE:-zimengxiong/excalidash-backend}:${EXCALIDASH_IMAGE_TAG:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL:-file:/app/prisma/dev.db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-excalidash}:${POSTGRES_PASSWORD:-change_me_strong_password}@postgres:5432/${POSTGRES_DB:-excalidash}?schema=public}
       PORT: ${PORT:-8000}
       NODE_ENV: ${NODE_ENV:-production}
       AUTH_MODE: ${AUTH_MODE:-local}
@@ -84,3 +108,4 @@ networks:
 
 volumes:
   backend-data:
+  postgres_data:

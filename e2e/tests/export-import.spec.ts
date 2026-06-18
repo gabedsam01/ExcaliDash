@@ -3,7 +3,6 @@ import {
   API_URL,
   createDrawing,
   deleteDrawing,
-  getCsrfHeaders,
   listDrawings,
   deleteCollection,
 } from "./helpers/api";
@@ -14,7 +13,6 @@ import {
  * Tests the export/import feature:
  * - Export/Import `.excalidash` backups
  * - Import `.excalidraw` and JSON files
- * - Legacy SQLite verification/import endpoints
  */
 
 test.describe("Export Functionality", () => {
@@ -318,19 +316,3 @@ test.describe.serial("Import Functionality", () => {
   });
 });
 
-test.describe("Database Import Verification", () => {
-  test("should verify SQLite import endpoint exists", async ({ request }) => {
-    const response = await request.post(`${API_URL}/import/sqlite/legacy/verify`, {
-      headers: await getCsrfHeaders(request),
-      multipart: {
-        db: {
-          name: "test.sqlite",
-          mimeType: "application/x-sqlite3",
-          buffer: Buffer.from(""),
-        },
-      },
-    });
-
-    expect([400, 500]).toContain(response.status());
-  });
-});

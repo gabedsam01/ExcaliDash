@@ -51,6 +51,85 @@ After changing limits, recreate both services:
 docker compose up -d --force-recreate backend frontend
 ```
 
+## Database (PostgreSQL)
+
+ExcaliDash is PostgreSQL-only. The backend connects via `DATABASE_URL`, in the
+canonical form:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?schema=public
+```
+
+In Docker Compose the DB host is the `postgres` service name; for a host-run dev
+backend it is `localhost`.
+
+### Local PostgreSQL (bundled compose `postgres` service)
+
+The Compose files include a bundled `postgres` service. Set the `POSTGRES_*`
+values and `DATABASE_URL` in `.env`, then bring the stack up:
+
+```env
+POSTGRES_DB=excalidash
+POSTGRES_USER=excalidash
+POSTGRES_PASSWORD=change_me_strong_password
+DATABASE_URL=postgresql://excalidash:change_me_strong_password@postgres:5432/excalidash?schema=public
+```
+
+```bash
+docker compose up -d
+```
+
+The backend's `DATABASE_URL` must point at the `postgres` service
+(`@postgres:5432`) and use the same credentials/database name as the
+`POSTGRES_*` values above.
+
+### External / managed PostgreSQL
+
+To use an external or managed PostgreSQL (RDS, Cloud SQL, a separate server,
+etc.), set `DATABASE_URL` to that instance and remove or ignore the bundled
+`postgres` service:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@db.example.com:5432/excalidash?schema=public
+```
+
+When using an external database you do not need the bundled `postgres` service
+or its `POSTGRES_*` variables; point only `DATABASE_URL` at the managed
+instance.
+
+### Applying migrations on deploy
+
+Migrations are applied with `prisma migrate deploy`. The backend entrypoint runs
+this automatically on startup when `RUN_MIGRATIONS=true` (the default), so a
+normal `docker compose up -d` brings the schema up to date against whatever
+`DATABASE_URL` points at.
+
+### Changing the password or database name
+
+Update the `POSTGRES_*` values and `DATABASE_URL` **together** — the user,
+password, and database name in `DATABASE_URL` must match the `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, and `POSTGRES_DB` of the running PostgreSQL. Changing one
+without the other will cause the backend to fail to connect.
+
+### Resetting the local environment
+
+To reset the local environment, remove the `postgres_data` volume. With the
+bundled `postgres` service, `docker compose down -v` drops the `postgres_data`
+named volume (and other named volumes), permanently deleting local database
+data:
+
+```bash
+docker compose down -v
+```
+
+### Unchanged by the PostgreSQL migration
+
+The PostgreSQL migration does **not** change the large-upload settings or any of
+the reverse-proxy behavior described in this document. `MAX_UPLOAD_MB`,
+`NGINX_CLIENT_MAX_BODY_SIZE`, the HTTP 413 (`PAYLOAD_TOO_LARGE`) behavior, and
+all reverse-proxy sections below (External Nginx, Caddy, Traefik, Cloudflare
+Tunnel, and the Coolify/Easypanel/Dokploy panels) remain exactly as documented.
+
 ## External Nginx
 
 ```nginx

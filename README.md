@@ -123,7 +123,7 @@ docker compose -f docker-compose.prod.yml down && \
 
 Notes:
 
-- Don’t add `-v` to `down` unless you intend to delete the persistent backend volume (your SQLite DB + secrets).
+- Don’t add `-v` to `down` unless you intend to delete the persistent backend volume (your PostgreSQL data volume + backend secrets). With the bundled `postgres` service, `docker compose down -v` also drops the `postgres_data` named volume.
 - Only add `--remove-orphans` if you previously ran a different Compose file for the same project name and need to remove old/renamed services.
 
 # Installation
@@ -244,8 +244,8 @@ Why:
 
 | Area          | Limitation                                                                                                                                                                                                                                                                                        |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Database      | The backend uses a local **SQLite file** database by default (`DATABASE_URL=file:/.../dev.db`). Running multiple backend replicas either creates split-brain state (separate DB files/volumes) or requires sharing a single SQLite file across hosts, which is not a reliable deployment pattern. |
-| Collaboration | Real-time presence state is tracked **in-memory** in the backend process, so multiple replicas will fragment presence/collaboration unless a shared Socket.IO adapter is added.                                                                                                                   |
+| Database      | The database is now **PostgreSQL**, so multiple backend replicas can share one PostgreSQL instance (the bundled Compose `postgres` service, or an external/managed PostgreSQL). The database is no longer the single-instance limiter. |
+| Collaboration | Real-time presence state is tracked **in-memory** in the backend process, so multiple replicas will fragment presence/collaboration unless a shared Socket.IO adapter is added. This in-memory Socket.IO presence/collab state is the remaining single-instance limiter, not the database.            |
 
 Recommended deployment pattern:
 
@@ -400,7 +400,7 @@ Base values are documented in `backend/.env.example`. Common ones to care about:
 
 | Variable                 | Default / Example         | Description                                                                         |
 | ------------------------ | ------------------------- | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL`           | `file:/app/prisma/dev.db` | SQLite file or external DB URL.                                                     |
+| `DATABASE_URL`           | `postgresql://excalidash:<password>@postgres:5432/excalidash?schema=public` | PostgreSQL connection string (bundled compose `postgres` service or an external/managed PostgreSQL). |
 | `FRONTEND_URL`           | `http://localhost:6767`   | Allowed frontend origin(s), comma-separated for multiple entries.                   |
 | `TRUST_PROXY`            | `false`                   | `false`, `true`, or hop count (for example `1`).                                    |
 | `JWT_SECRET`             | `change-this-secret...`   | Recommended in production so sessions remain stable across restarts and migrations. |
@@ -464,12 +464,39 @@ npm install
 # Copy environment file and customize if needed
 cp .env.example .env
 
-# Generate Prisma client and setup database
+# Start a local PostgreSQL for development (bundled compose 'postgres' service)
+docker compose up -d postgres
+
+# Generate Prisma client and set up the database
 npx prisma generate
-npx prisma db push
+
+# For local dev, create/apply migrations against your dev database
+npx prisma migrate dev
+# Or, to apply already-committed migrations without creating new ones:
+# npx prisma migrate deploy
 
 npm run dev
 ```
+
+</details>
+
+<details>
+<summary>Migrating data from an old SQLite install</summary>
+
+ExcaliDash is now PostgreSQL-only, and the in-app legacy SQLite import feature
+was removed in this version. There is **no automated path** that reads an old
+`dev.db` SQLite file into the new PostgreSQL database.
+
+If you are upgrading from an older SQLite-based build, export your data with your
+**current (SQLite) version before upgrading**:
+
+- Export a full `.excalidash` backup, and/or export individual drawings as
+  `.excalidraw` files.
+
+Then upgrade to this PostgreSQL-based version, and once it is running on
+PostgreSQL, import those files back through the dashboard **Import** action
+(and **Settings → Advanced / Legacy → Import Backup** for the `.excalidash`
+backup).
 
 </details>
 

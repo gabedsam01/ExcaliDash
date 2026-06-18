@@ -3,7 +3,6 @@
  */
 import dotenv from "dotenv";
 import crypto from "crypto";
-import path from "path";
 import {
   loadRequestLimits,
   RequestLimits,
@@ -160,32 +159,38 @@ const parseFrontendUrl = (raw: string | undefined): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const resolveDatabaseUrl = (rawUrl?: string) => {
-  const backendRoot = path.resolve(__dirname, "../");
-  const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
+/**
+ * ExcaliDash is PostgreSQL-only. SQLite (and any `file:` URL) is no longer
+ * supported. This validates DATABASE_URL early and fails fast with a clear,
+ * actionable message instead of silently falling back to a local file.
+ */
+const resolveDatabaseUrl = (rawUrl?: string): string => {
+  const trimmed = rawUrl?.trim();
 
-  if (!rawUrl || rawUrl.trim().length === 0) {
-    return `file:${defaultDbPath}`;
+  if (!trimmed) {
+    throw new Error(
+      "Missing required environment variable: DATABASE_URL. ExcaliDash " +
+        "requires a PostgreSQL connection string, e.g. " +
+        "postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public",
+    );
   }
 
-  if (!rawUrl.startsWith("file:")) {
-    return rawUrl;
+  if (/^file:/i.test(trimmed) || /^sqlite:/i.test(trimmed)) {
+    throw new Error(
+      "SQLite is no longer supported. DATABASE_URL must be a PostgreSQL " +
+        "connection string (postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public). " +
+        "Received a SQLite/file URL — update DATABASE_URL to point at PostgreSQL.",
+    );
   }
 
-  const filePath = rawUrl.replace(/^file:/, "");
-  const prismaDir = path.resolve(backendRoot, "prisma");
-  const normalizedRelative = filePath.replace(/^\.\/?/, "");
-  const hasLeadingPrismaDir =
-    normalizedRelative === "prisma" || normalizedRelative.startsWith("prisma/");
+  if (!/^postgres(ql)?:\/\//i.test(trimmed)) {
+    throw new Error(
+      "Invalid DATABASE_URL: ExcaliDash requires a PostgreSQL connection " +
+        "string starting with postgresql:// (or postgres://).",
+    );
+  }
 
-  const absolutePath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(
-        hasLeadingPrismaDir ? backendRoot : prismaDir,
-        normalizedRelative,
-      );
-
-  return `file:${absolutePath}`;
+  return trimmed;
 };
 
 process.env.DATABASE_URL = resolveDatabaseUrl(process.env.DATABASE_URL);

@@ -1,38 +1,47 @@
 /* eslint-disable no-console */
 const { execSync } = require("child_process");
-const fs = require("fs");
 const path = require("path");
 
 const backendRoot = path.resolve(__dirname, "..");
 
+// ExcaliDash is PostgreSQL-only. Fail fast (with a clear message) instead of
+// silently defaulting to a local SQLite file like older versions did.
 const resolveDatabaseUrl = (rawUrl) => {
-  const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
+  const trimmed = rawUrl ? String(rawUrl).trim() : "";
 
-  if (!rawUrl || String(rawUrl).trim().length === 0) {
-    return `file:${defaultDbPath}`;
+  if (!trimmed) {
+    console.error(
+      "[predev] Missing DATABASE_URL. ExcaliDash requires a PostgreSQL connection string, e.g.\n" +
+        "  DATABASE_URL=postgresql://excalidash:change_me@localhost:5432/excalidash?schema=public\n" +
+        "Start a local database with: docker compose up -d postgres",
+    );
+    process.exit(1);
   }
 
-  if (!String(rawUrl).startsWith("file:")) {
-    return String(rawUrl);
+  if (/^file:/i.test(trimmed) || /^sqlite:/i.test(trimmed)) {
+    console.error(
+      "[predev] SQLite is no longer supported. DATABASE_URL must point at PostgreSQL " +
+        "(postgresql://...). Update your backend/.env or environment.",
+    );
+    process.exit(1);
   }
 
-  const filePath = String(rawUrl).replace(/^file:/, "");
-  const prismaDir = path.resolve(backendRoot, "prisma");
-  const normalizedRelative = filePath.replace(/^\.\/?/, "");
-  const hasLeadingPrismaDir =
-    normalizedRelative === "prisma" || normalizedRelative.startsWith("prisma/");
+  if (!/^postgres(ql)?:\/\//i.test(trimmed)) {
+    console.error(
+      "[predev] Invalid DATABASE_URL. ExcaliDash requires a PostgreSQL connection string " +
+        "starting with postgresql:// (or postgres://).",
+    );
+    process.exit(1);
+  }
 
-  const absolutePath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(hasLeadingPrismaDir ? backendRoot : prismaDir, normalizedRelative);
-
-  return `file:${absolutePath}`;
+  return trimmed;
 };
 
 const databaseUrl = resolveDatabaseUrl(process.env.DATABASE_URL);
 process.env.DATABASE_URL = databaseUrl;
 
 const nodeEnv = process.env.NODE_ENV || "development";
+const isNonProd = nodeEnv !== "production";
 
 const runCapture = (cmd) => {
   try {
@@ -69,27 +78,6 @@ const run = (cmd) => {
   });
 };
 
-const getDbFilePath = () => {
-  if (!databaseUrl.startsWith("file:")) return null;
-  return databaseUrl.replace(/^file:/, "");
-};
-
-const backupDbIfPresent = () => {
-  const dbPath = getDbFilePath();
-  if (!dbPath) return null;
-  if (!fs.existsSync(dbPath)) return null;
-
-  const dir = path.dirname(dbPath);
-  const base = path.basename(dbPath, path.extname(dbPath));
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = path.join(dir, `${base}.${stamp}.backup`);
-
-  fs.copyFileSync(dbPath, backupPath);
-  return backupPath;
-};
-
-const isNonProd = nodeEnv !== "production";
-const isFileDb = databaseUrl.startsWith("file:");
 const shouldForceSingleUserDev =
   isNonProd &&
   process.env.AUTH_MODE !== "hybrid" &&
@@ -133,15 +121,15 @@ const main = async () => {
     if (deploy.stderr) process.stderr.write(deploy.stderr);
 
     const stderr = deploy.stderr || "";
+    // P3005: the database schema is not empty but has no migration history.
+    // In local development it is safe to reset; never do this in production.
     const isP3005 = stderr.includes("P3005");
 
-    if (isNonProd && isFileDb && isP3005) {
-      const backupPath = backupDbIfPresent();
+    if (isNonProd && isP3005) {
       console.warn(
-        `[predev] Prisma migrate baseline required (P3005). Resetting local SQLite database.\n` +
+        "[predev] Prisma migrate baseline required (P3005). Resetting local development database.\n" +
           `  DATABASE_URL=${databaseUrl}\n` +
-          (backupPath ? `  Backup: ${backupPath}\n` : "") +
-          `  If you need to preserve local data, restore the backup and baseline manually.`,
+          "  This DROPS all data in the target database. Use a dedicated local PostgreSQL database for development.",
       );
 
       run("npx prisma migrate reset --force --skip-seed");

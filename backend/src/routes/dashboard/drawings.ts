@@ -92,7 +92,7 @@ export const registerDrawingRoutes = (
       typeof search === "string" && search.trim().length > 0 ? search.trim() : undefined;
 
     if (searchTerm) {
-      where.name = { contains: searchTerm };
+      where.name = { contains: searchTerm, mode: "insensitive" };
     }
 
     let collectionFilterKey = "default";
@@ -269,7 +269,7 @@ export const registerDrawingRoutes = (
       },
     };
     if (searchTerm) {
-      whereDrawing.name = { contains: searchTerm };
+      whereDrawing.name = { contains: searchTerm, mode: "insensitive" };
     }
 
     const summarySelect: Prisma.DrawingSelect = {
@@ -647,9 +647,9 @@ export const registerDrawingRoutes = (
         isActive: true,
         id: { not: req.user.id },
         OR: [
-          { email: { contains: q } },
-          { name: { contains: q } },
-          { username: { contains: q } },
+          { email: { contains: q, mode: "insensitive" } },
+          { name: { contains: q, mode: "insensitive" } },
+          { username: { contains: q, mode: "insensitive" } },
         ],
       },
       select: { id: true, name: true, email: true },
