@@ -37,6 +37,7 @@ import {
   getHttpsRedirectUrl,
 } from "./server/httpsRedirectPolicy";
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode";
+import { registerApiKeyRoutes } from "./apiKeys/routes";
 
 const backendRoot = path.resolve(__dirname, "../");
 console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
@@ -524,6 +525,13 @@ if (enableOnboardingGate) {
 registerSystemRoutes(app, {
   asyncHandler,
   getBackendVersion,
+});
+
+registerApiKeyRoutes(app, {
+  prisma,
+  requireAuth,
+  asyncHandler,
+  apiKeySecret: config.apiKeySecret,
 });
 
 registerDashboardRoutes(app, {

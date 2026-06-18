@@ -18,6 +18,7 @@ A self-hosted dashboard and organizer for [Excalidraw](https://github.com/excali
   - [Quickstart](#quickstart)
   - [Advanced](#advanced)
 - [Deployment and reverse proxies](#deployment-and-reverse-proxies)
+- [API Keys for MCP clients](#api-keys-for-mcp-clients)
 - [Development](#development)
 - [Credits](#credits)
 
@@ -164,7 +165,10 @@ docker compose -f docker-compose.prod.yml up -d
 # Access the frontend at localhost:6767
 ```
 
-For single-container deployments, `JWT_SECRET` can be omitted and will be auto-generated and persisted in the backend volume on first start. For portability and most production deployments, set a fixed `JWT_SECRET` explicitly.
+For single-container deployments, `JWT_SECRET`, `CSRF_SECRET`, and
+`API_KEY_SECRET` can be omitted and will be auto-generated and persisted in the
+backend volume on first start. For portability, backups, and multi-instance
+deployments, set fixed secrets explicitly.
 
 By default, the provided Compose files set `TRUST_PROXY=false` for safer setup. Only set `TRUST_PROXY` to a positive hop count (for example, `1`) when requests always pass through a trusted reverse proxy that correctly sets forwarded headers.
 
@@ -405,6 +409,7 @@ Base values are documented in `backend/.env.example`. Common ones to care about:
 | `TRUST_PROXY`            | `false`                   | `false`, `true`, or hop count (for example `1`).                                    |
 | `JWT_SECRET`             | `change-this-secret...`   | Recommended in production so sessions remain stable across restarts and migrations. |
 | `CSRF_SECRET`            | `change-this-secret`      | Recommended in production so CSRF validation remains stable across restarts.        |
+| `API_KEY_SECRET`         | Strong random secret      | HMAC secret for user API keys. Direct production starts require it; the Docker entrypoint can generate and persist it for a single instance. |
 | `AUTH_MODE`              | `local`                   | `local`, `hybrid`, `oidc_enforced`.                                                 |
 | `ENFORCE_HTTPS_REDIRECT` | `true`                    | Set to `false` to disable the built-in HTTP→HTTPS redirect when your outer gateway handles it. |
 | `MAX_UPLOAD_MB`          | `250`                     | Multipart backup and legacy database upload limit.                                 |
@@ -415,6 +420,38 @@ Base values are documented in `backend/.env.example`. Common ones to care about:
 | `MAX_DATA_URL_MB`        | `100`                     | Maximum embedded image data URL size retained during sanitization.                 |
 
 </details>
+
+## API Keys for MCP clients
+
+Settings includes an **MCP / API Keys** area for creating user-scoped
+credentials for future MCP integrations. Tokens use the `exd_` prefix, are
+shown once at creation time, and are never stored in plaintext. Afterward,
+ExcaliDash returns only a masked preview.
+
+The actual `/mcp` server is not implemented yet. The UI prepares credentials
+and client configuration for use when that endpoint is enabled.
+
+Claude Code example:
+
+```bash
+claude mcp add --transport http excalidash --scope local https://your-domain/mcp --header "Authorization: Bearer YOUR_TOKEN"
+```
+
+Use `--scope project` for repo-shared MCP configuration, but do not commit real
+tokens. Prefer private local/user configuration or environment-variable
+substitution for secrets.
+
+Backend configuration:
+
+```env
+API_KEY_SECRET=change_me_strong_random_secret
+```
+
+Use a unique random value of at least 32 characters; the example above is a
+placeholder and is rejected in production. The Docker entrypoint generates and
+persists a value in `/app/prisma/.api_key_secret` when the variable is omitted.
+Set it explicitly for portable backups or deployments with more than one
+backend instance.
 
 # Development
 

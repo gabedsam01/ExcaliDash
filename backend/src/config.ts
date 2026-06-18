@@ -23,6 +23,7 @@ interface Config {
   rateLimitMaxRequests: number;
   csrfMaxRequests: number;
   csrfSecret: string | null;
+  apiKeySecret: string;
   oidc: OidcConfig;
   enablePasswordReset: boolean;
   enableRefreshTokenRotation: boolean;
@@ -145,6 +146,23 @@ const resolveJwtSecret = (nodeEnv: string): string => {
   const generated = crypto.randomBytes(32).toString("hex");
   console.warn(
     "[security] JWT_SECRET is not set (non-production). Using an ephemeral secret; tokens will be invalidated on restart.",
+  );
+  return generated;
+};
+
+const resolveApiKeySecret = (nodeEnv: string): string => {
+  const provided = process.env.API_KEY_SECRET;
+  if (provided && provided.trim().length > 0) {
+    return provided;
+  }
+
+  if (nodeEnv === "production") {
+    throw new Error("Missing required environment variable: API_KEY_SECRET");
+  }
+
+  const generated = crypto.randomBytes(32).toString("hex");
+  console.warn(
+    "[security] API_KEY_SECRET is not set (non-production). Using an ephemeral secret; API keys will stop validating after restart.",
   );
   return generated;
 };
@@ -308,20 +326,22 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
   };
 };
 
+const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 
 export const config: Config = {
   port: getRequiredEnvNumber("PORT", 8000),
-  nodeEnv: getOptionalEnv("NODE_ENV", "development"),
+  nodeEnv: resolvedNodeEnv,
   databaseUrl: process.env.DATABASE_URL,
   frontendUrl: parseFrontendUrl(process.env.FRONTEND_URL),
   authMode: resolvedAuthMode,
-  jwtSecret: resolveJwtSecret(getOptionalEnv("NODE_ENV", "development")),
+  jwtSecret: resolveJwtSecret(resolvedNodeEnv),
   jwtAccessExpiresIn: getOptionalEnv("JWT_ACCESS_EXPIRES_IN", "15m"),
   jwtRefreshExpiresIn: getOptionalEnv("JWT_REFRESH_EXPIRES_IN", "7d"),
   rateLimitMaxRequests: getRequiredEnvNumber("RATE_LIMIT_MAX_REQUESTS", 1000),
   csrfMaxRequests: getRequiredEnvNumber("CSRF_MAX_REQUESTS", 60),
   csrfSecret: process.env.CSRF_SECRET || null,
+  apiKeySecret: resolveApiKeySecret(resolvedNodeEnv),
   oidc: resolveOidcConfig(resolvedAuthMode),
   enablePasswordReset: getOptionalBoolean("ENABLE_PASSWORD_RESET", false),
   enableRefreshTokenRotation: getOptionalBoolean(
@@ -343,9 +363,14 @@ export const config: Config = {
 
 if (config.nodeEnv === "production") {
   const normalizedSecret = config.jwtSecret.trim();
+  const normalizedApiKeySecret = config.apiKeySecret.trim();
   const insecureJwtSecretPlaceholders = new Set([
     "your-secret-key-change-in-production",
     "change-this-secret-in-production-min-32-chars",
+  ]);
+  const insecureApiKeySecretPlaceholders = new Set([
+    "change_me_strong_random_secret",
+    "change-this-api-key-secret-in-production",
   ]);
 
   if (config.jwtSecret.length < 32) {
@@ -356,6 +381,16 @@ if (config.nodeEnv === "production") {
   if (insecureJwtSecretPlaceholders.has(normalizedSecret)) {
     throw new Error(
       "JWT_SECRET must be changed from placeholder/default value in production",
+    );
+  }
+  if (config.apiKeySecret.length < 32) {
+    throw new Error(
+      "API_KEY_SECRET must be at least 32 characters long in production",
+    );
+  }
+  if (insecureApiKeySecretPlaceholders.has(normalizedApiKeySecret)) {
+    throw new Error(
+      "API_KEY_SECRET must be changed from placeholder/default value in production",
     );
   }
   if (

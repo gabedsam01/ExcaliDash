@@ -3,6 +3,7 @@ set -e
 
 JWT_SECRET_FILE="/app/prisma/.jwt_secret"
 CSRF_SECRET_FILE="/app/prisma/.csrf_secret"
+API_KEY_SECRET_FILE="/app/prisma/.api_key_secret"
 MIGRATION_LOCK_DIR="/app/prisma/.migration-lock"
 MIGRATION_LOCK_TIMEOUT_SECONDS="${MIGRATION_LOCK_TIMEOUT_SECONDS:-120}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
@@ -50,9 +51,29 @@ fi
 
 export CSRF_SECRET
 
+# Ensure the API key HMAC secret remains stable across restarts.
+if [ -z "${API_KEY_SECRET:-}" ]; then
+    echo "API_KEY_SECRET not provided, resolving persisted secret..."
+    if [ -f "${API_KEY_SECRET_FILE}" ]; then
+        API_KEY_SECRET="$(tr -d '\r\n' < "${API_KEY_SECRET_FILE}")"
+    fi
+
+    if [ -z "${API_KEY_SECRET}" ]; then
+        echo "No persisted API key secret found. Generating a new secret..."
+        API_KEY_SECRET="$(openssl rand -hex 32)"
+        umask 077
+        printf "%s" "${API_KEY_SECRET}" > "${API_KEY_SECRET_FILE}"
+    fi
+else
+    umask 077
+    printf "%s" "${API_KEY_SECRET}" > "${API_KEY_SECRET_FILE}"
+fi
+
+export API_KEY_SECRET
+
 # 1. Ensure schema and migrations are present (Running as root)
 # /app/prisma now only holds the Prisma schema/migrations and the persisted
-# JWT/CSRF secrets (no database file lives here). Copy individual files rather
+# JWT/CSRF/API key secrets (no database file lives here). Copy individual files rather
 # than the whole prisma directory so the persisted secrets are never clobbered.
 if [ ! -f "/app/prisma/schema.prisma" ]; then
     echo "Mount appears empty (missing schema.prisma). Bootstrapping schema and migrations..."
@@ -72,6 +93,7 @@ chown -R nodejs:nodejs /app/prisma
 chmod 755 /app/uploads
 chmod 600 "${JWT_SECRET_FILE}"
 chmod 600 "${CSRF_SECRET_FILE}"
+chmod 600 "${API_KEY_SECRET_FILE}"
 
 # 3. Run Migrations (Drop privileges to nodejs)
 # Multi-replica note:

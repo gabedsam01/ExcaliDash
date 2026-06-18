@@ -27,6 +27,43 @@ export type UpdateInfo = {
   error?: string;
 };
 
+export type ApiKeyClient = "claude-code" | "other";
+
+export type ApiKeySummary = {
+  id: string;
+  name: string;
+  client: ApiKeyClient | null;
+  preview: string;
+  prefix: string;
+  suffix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+export type CreatedApiKey = ApiKeySummary & {
+  token: string;
+};
+
+export const getApiKeys = async (): Promise<ApiKeySummary[]> => {
+  const response = await api.get<ApiKeySummary[]>("/api-keys");
+  return response.data;
+};
+
+export const createApiKey = async (params: {
+  name: string;
+  client: ApiKeyClient;
+}): Promise<CreatedApiKey> => {
+  const response = await api.post<CreatedApiKey>("/api-keys", params);
+  return response.data;
+};
+
+export const revokeApiKey = async (
+  id: string,
+): Promise<{ success: true }> => {
+  const response = await api.delete<{ success: true }>(`/api-keys/${id}`);
+  return response.data;
+};
+
 export const getUpdateInfo = async (channel: UpdateChannel): Promise<UpdateInfo> => {
   const response = await api.get<UpdateInfo>("/system/update", { params: { channel } });
   return response.data;

@@ -19,6 +19,7 @@ export default defineConfig({
       DATABASE_URL: testDatabaseUrl,
       NODE_ENV: "test",
       AUTH_MODE: "local",
+      API_KEY_SECRET: "test-api-key-secret-at-least-32-characters",
     },
     pool: "forks",
     poolOptions: {
