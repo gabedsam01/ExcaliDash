@@ -205,6 +205,104 @@ function readSkillDescription(skillDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Content quality checks (placeholders + minimum structure)
+// ---------------------------------------------------------------------------
+
+// Template / placeholder markers that must never ship in skill content.
+// Deliberately conservative: these match template artifacts, NOT legitimate
+// prose such as "[REDACTED_*] placeholder" (redaction) or "32px gap" (layout).
+const PLACEHOLDER_PATTERNS = [
+  { re: /\bTODO\b/, label: 'TODO' },
+  { re: /\bFIXME\b/, label: 'FIXME' },
+  { re: /\bTBD\b/, label: 'TBD' },
+  { re: /\bXXX\b/, label: 'XXX' },
+  { re: /lorem ipsum/i, label: 'lorem ipsum' },
+  { re: /template-only/i, label: 'template-only' },
+  { re: /\bdraft-only\b/i, label: 'draft-only' },
+  { re: /\bfill[ -]?(?:the )?gap\b/i, label: 'fill gap' },
+  { re: /placeholder (?:text|content)/i, label: 'placeholder text/content' },
+  { re: /<placeholder>/i, label: '<placeholder>' },
+  { re: /coming soon/i, label: 'coming soon' },
+  { re: /\bto be written\b/i, label: 'to be written' },
+];
+
+// Minimum body (post-frontmatter) shape expected of a real, non-stub skill.
+const MIN_BODY_CHARS = 1200;
+const MIN_SECTIONS = 6;
+
+/** All markdown files that make up a skill: SKILL.md + references/*.md. */
+function listSkillMarkdown(skillDir) {
+  const files = [];
+  const skillMd = path.join(skillDir, 'SKILL.md');
+  if (isFile(skillMd)) files.push(skillMd);
+  const refDir = path.join(skillDir, 'references');
+  if (isDir(refDir)) {
+    for (const e of fs.readdirSync(refDir)) {
+      if (e.endsWith('.md')) files.push(path.join(refDir, e));
+    }
+  }
+  return files;
+}
+
+/** Return a list of "<token> in <file>" hits for template/placeholder markers. */
+function scanPlaceholders(skillDir) {
+  const hits = [];
+  for (const file of listSkillMarkdown(skillDir)) {
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch (_err) {
+      continue;
+    }
+    const rel =
+      path.basename(path.dirname(file)) === 'references'
+        ? `references/${path.basename(file)}`
+        : path.basename(file);
+    for (const { re, label } of PLACEHOLDER_PATTERNS) {
+      if (re.test(text)) {
+        hits.push(`${label} in ${rel}`);
+      }
+    }
+  }
+  return hits;
+}
+
+/** Strip a leading YAML frontmatter block and return the markdown body. */
+function skillBody(skillMdPath) {
+  let text;
+  try {
+    text = fs.readFileSync(skillMdPath, 'utf8');
+  } catch (_err) {
+    return '';
+  }
+  text = text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  if (text.startsWith('---\n')) {
+    const end = text.indexOf('\n---', 4);
+    if (end !== -1) {
+      text = text.slice(end + 4);
+    }
+  }
+  return text;
+}
+
+/** Return structural problems for a SKILL.md body (empty array = ok). */
+function structureProblems(skillMdPath) {
+  const body = skillBody(skillMdPath).trim();
+  const problems = [];
+  if (body.length < MIN_BODY_CHARS) {
+    problems.push(`SKILL.md body too short (${body.length} < ${MIN_BODY_CHARS} chars)`);
+  }
+  const sections = (body.match(/^## /gm) || []).length;
+  if (sections < MIN_SECTIONS) {
+    problems.push(`SKILL.md has ${sections} "## " sections (< ${MIN_SECTIONS})`);
+  }
+  if (!/(^|\D)95(\D|$)/m.test(body)) {
+    problems.push('SKILL.md does not reference the minimum score (95)');
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
 // Argument parsing
 // ---------------------------------------------------------------------------
 
@@ -367,6 +465,18 @@ function cmdVerify(args) {
       if (!fm.name) problems.push('frontmatter missing "name"');
       if (!fm.description) problems.push('frontmatter missing "description"');
       if (!fm['allowed-tools']) problems.push('frontmatter missing "allowed-tools"');
+      if (fm.name && fm.name !== name) {
+        problems.push(`frontmatter name "${fm.name}" != directory "${name}"`);
+      }
+
+      // Content quality: no placeholder/stub markers, minimum real structure.
+      const placeholders = scanPlaceholders(skillDir);
+      if (placeholders.length) {
+        problems.push(`placeholder markers (${placeholders.join('; ')})`);
+      }
+      for (const p of structureProblems(skillMd)) {
+        problems.push(p);
+      }
     }
 
     if (problems.length) {
@@ -430,8 +540,12 @@ Commands:
 
   verify [--scope user|project|local] [--project-dir .]
       Check that all ${EXPECTED_SKILL_COUNT} skills + ${SHARED_DIR} exist and that each
-      SKILL.md has name / description / allowed-tools frontmatter.
-      With no --scope, verifies the source bundle instead. Exits 1 on problems.
+      SKILL.md has name / description / allowed-tools frontmatter (name matching
+      its directory), carries no placeholder/stub markers (TODO, lorem ipsum,
+      template-only, draft-only, fill gap, …) in SKILL.md or references/, and
+      meets a minimum real structure (>= ${MIN_SECTIONS} sections, >= ${MIN_BODY_CHARS} body chars,
+      references the score gate). With no --scope, verifies the source bundle.
+      Exits 1 on problems.
 
 Targets:
   user             ~/.claude/skills/${BUNDLE_NAME}

@@ -114,9 +114,11 @@ describe("ApiKeysCard", () => {
 
     const expectedUrl = buildMcpUrl(window.location.origin);
     expect(screen.getByText(new RegExp(`MCP URL: ${expectedUrl}`))).toBeInTheDocument();
-    expect(screen.getByText(/--scope local/)).toHaveTextContent(expectedUrl);
-    expect(screen.getByText(/--scope project/)).toHaveTextContent(expectedUrl);
-    expect(screen.getByText(/--scope user/)).toHaveTextContent(expectedUrl);
+    // Target the `claude mcp add` command specifically (skills install commands
+    // also mention --scope user/project, so match the full claude command).
+    expect(screen.getByText(/claude mcp add.*--scope local/)).toHaveTextContent(expectedUrl);
+    expect(screen.getByText(/claude mcp add.*--scope project/)).toHaveTextContent(expectedUrl);
+    expect(screen.getByText(/claude mcp add.*--scope user/)).toHaveTextContent(expectedUrl);
   });
 
   it("shows copyable JSON for other MCP clients", async () => {

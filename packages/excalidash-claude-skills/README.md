@@ -87,8 +87,17 @@ npx -y @excalidash/claude-skills uninstall --scope project --project-dir .
 ### verify
 
 Check that all 25 skills + `_shared` exist at the target, and that each
-`SKILL.md` has the required `name`, `description`, and `allowed-tools`
-frontmatter. Prints a checklist and exits non-zero if anything is missing:
+`SKILL.md`:
+
+- has the required `name`, `description`, and `allowed-tools` frontmatter
+  (with `name` matching its directory),
+- carries **no placeholder / stub markers** (`TODO`, `lorem ipsum`,
+  `template-only`, `draft-only`, `fill gap`, `placeholder text`, …) in
+  `SKILL.md` or `references/`, and
+- meets a **minimum real structure** (≥ 6 `##` sections, ≥ 1200 body chars,
+  and references the score gate).
+
+Prints a checklist and exits non-zero if anything is missing or malformed:
 
 ```bash
 # verify what is installed at a scope
