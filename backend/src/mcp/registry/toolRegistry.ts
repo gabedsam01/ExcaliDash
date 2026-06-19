@@ -18,6 +18,7 @@ import { scoreScene } from "../quality/score";
 import { repairScene } from "../quality/repair";
 import { autoPolish } from "../quality/autopolish";
 import { generateDiagramScene } from "../generate/diagram";
+import { injectConceptIcons } from "../generate/iconInjection";
 import { renderTemplate, listTemplates } from "../templates/templates";
 import { listPresets } from "../templates/presets";
 import { exportScene, type ExportFormat } from "../drawings/exportService";
@@ -160,9 +161,21 @@ const polishAndMaybeSave = async (
     });
     finalScene = polish.scene;
   }
-  const score = polish
-    ? polish.score
-    : scoreScene(finalScene, ctx.config.minDrawingScore, lintOverrides);
+
+  // Auto-inject recognized icons into card slots (default on; the model never
+  // has to remember a second add_library_items call). MCP_LIBRARY_MODE=off opts
+  // out. A per-card score guard rolls any injection back if it lowers quality.
+  let injectedIcons = 0;
+  if (ctx.config.libraryMode !== "off") {
+    const injection = injectConceptIcons(finalScene, {
+      minimumScore: ctx.config.minDrawingScore,
+      lintOverrides,
+    });
+    finalScene = injection.scene;
+    injectedIcons = injection.injected;
+  }
+
+  const score = scoreScene(finalScene, ctx.config.minDrawingScore, lintOverrides);
 
   let saved: { drawingId: string; editUrl: string | null } | null = null;
   const allowDraft = args.allowDraft ?? ctx.config.allowLowScoreDraft;
@@ -194,6 +207,7 @@ const polishAndMaybeSave = async (
   return {
     scene: finalScene,
     elementCount: finalScene.elements.length,
+    injectedIcons,
     score,
     polish: polish
       ? { attempts: polish.attempts, passed: polish.passed, history: polish.history }
