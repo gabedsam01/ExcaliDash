@@ -18,11 +18,13 @@ const EXPECTED_TOOLS = [
   "cache_library",
   "add_library_items",
   "add_library_items_normalized",
-  // Quality / geometry (4)
+  // Quality / geometry (6)
   "lint_drawing",
   "score_drawing",
   "repair_drawing",
   "auto_polish_drawing",
+  "score_drawing_visual",
+  "run_repair_loop",
   // Architecture / code (4)
   "create_from_repo_analysis",
   "apply_architecture_skill",
@@ -37,9 +39,9 @@ const EXPECTED_TOOLS = [
 describe("MCP tool registry", () => {
   const tools = buildToolRegistry();
 
-  it("exposes exactly 25 public tools", () => {
-    expect(tools).toHaveLength(25);
-    expect(EXPECTED_TOOLS).toHaveLength(25);
+  it("exposes exactly 27 public tools", () => {
+    expect(tools).toHaveLength(27);
+    expect(EXPECTED_TOOLS).toHaveLength(27);
   });
 
   it("matches the required tool names exactly (no extras, no missing)", () => {

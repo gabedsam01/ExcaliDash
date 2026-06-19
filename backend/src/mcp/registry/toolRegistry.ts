@@ -19,6 +19,12 @@ import { repairScene } from "../quality/repair";
 import { autoPolish } from "../quality/autopolish";
 import { generateDiagramScene } from "../generate/diagram";
 import { injectConceptIcons } from "../generate/iconInjection";
+import { runRepairLoop } from "../quality/repairLoop";
+import {
+  blendScore,
+  scoreVisualFromPixels,
+  scoreVisualFromScene,
+} from "../quality/visualScore";
 import { renderTemplate, listTemplates } from "../templates/templates";
 import { listPresets } from "../templates/presets";
 import { exportScene, type ExportFormat } from "../drawings/exportService";
@@ -718,6 +724,100 @@ export const buildToolRegistry = (): McpTool[] => {
         passed: result.passed,
         attempts: result.attempts,
         history: result.history,
+        saved,
+        savedAsDraft: Boolean(saved) && !result.passed,
+      });
+    },
+  );
+
+  tool(
+    "score_drawing_visual",
+    "Score aesthetic/visual quality 0-100 (icon coverage, colour discipline, whitespace balance, legibility). Uses a rendered pixel grid when provided (from the e2e capture), else a deterministic scene proxy; blended with the geometry score by default.",
+    z.object({
+      ...sceneFields,
+      pixels: z
+        .object({
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          data: z.array(z.number()),
+        })
+        .optional(),
+      blendWithGeometry: z.boolean().optional(),
+    }),
+    async (raw, ctx) => {
+      const args = raw as Record<string, unknown>;
+      const scene = await resolveScene(args, ctx);
+      const visual = args.pixels
+        ? scoreVisualFromPixels(args.pixels as never)
+        : scoreVisualFromScene(scene);
+      const geometry = scoreScene(scene, ctx.config.minDrawingScore);
+      const combinedScore =
+        args.blendWithGeometry === false
+          ? visual.score
+          : blendScore(geometry.score, visual.score);
+      return ok({
+        visual,
+        geometryScore: geometry.score,
+        combinedScore,
+        passed:
+          geometry.hardBlockers.length === 0 &&
+          combinedScore >= ctx.config.minDrawingScore,
+      });
+    },
+  );
+
+  tool(
+    "run_repair_loop",
+    "Server-driven quality loop: geometry repair + style normalization + icon injection, best-kept with rollback (NOT model self-grading). Converges to the bar or reports why not.",
+    z.object({
+      ...sceneFields,
+      ...lintFlagFields,
+      minimumScore: z.number().int().min(0).max(100).optional(),
+      maxRounds: z.number().int().positive().max(10).optional(),
+      injectIcons: z.boolean().optional(),
+      normalizeStyle: z.boolean().optional(),
+      save: z.boolean().optional(),
+      allowDraft: z.boolean().optional(),
+      name: z.string().optional(),
+    }),
+    async (raw, ctx) => {
+      const args = raw as Record<string, unknown>;
+      const scene = await resolveScene(args, ctx);
+      const result = runRepairLoop(scene, {
+        minimumScore:
+          (args.minimumScore as number) ?? ctx.config.minDrawingScore,
+        maxRounds: args.maxRounds as number | undefined,
+        lintOverrides: lintOverridesFrom(args, ctx),
+        injectIcons: args.injectIcons as boolean | undefined,
+        normalizeStyle: args.normalizeStyle as boolean | undefined,
+      });
+      let saved: { drawingId: string; editUrl: string | null } | null = null;
+      const allowDraft =
+        (args.allowDraft as boolean | undefined) ?? ctx.config.allowLowScoreDraft;
+      if (args.save && args.id && (result.passed || allowDraft)) {
+        const summary = await ctx.drawingService.updateDrawing(
+          ctx.principal.userId,
+          args.id as string,
+          {
+            name: args.name as string | undefined,
+            scene: result.scene,
+            createVersion: true,
+          },
+        );
+        const url = await ctx.drawingService.getDrawingUrl(
+          ctx.principal.userId,
+          summary.id,
+        );
+        saved = { drawingId: summary.id, editUrl: url.url };
+      }
+      return ok({
+        scene: result.scene,
+        score: result.score,
+        passed: result.passed,
+        rounds: result.rounds,
+        applied: result.applied,
+        history: result.history,
+        notes: result.notes,
         saved,
         savedAsDraft: Boolean(saved) && !result.passed,
       });

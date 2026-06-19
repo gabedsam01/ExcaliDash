@@ -48,10 +48,10 @@ describe("MCP JSON-RPC transport", () => {
     expect(result.capabilities.tools).toBeTruthy();
   });
 
-  it("lists exactly 25 tools with input schemas", async () => {
+  it("lists exactly 27 tools with input schemas", async () => {
     const res = await call({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const result = (res as { result: any }).result;
-    expect(result.tools).toHaveLength(25);
+    expect(result.tools).toHaveLength(27);
     for (const t of result.tools) {
       expect(t.name).toBeTruthy();
       expect(t.inputSchema.type).toBe("object");

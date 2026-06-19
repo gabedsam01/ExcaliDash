@@ -47,14 +47,15 @@ export interface McpGuide {
 export const buildGuide = (config: McpConfig): McpGuide => ({
   name: "ExcaliDash MCP",
   description:
-    "Create, edit, validate, repair, version, export and save professional Excalidraw diagrams in your ExcaliDash workspace. The LLM is external; this MCP only executes 25 deterministic tools.",
+    "Create, edit, validate, repair, version, export and save professional Excalidraw diagrams in your ExcaliDash workspace. The LLM is external; this MCP only executes 27 deterministic tools.",
   authentication:
     "Send Authorization: Bearer exd_... (an ExcaliDash API key). Each key only accesses its owner's drawings, libraries and exports.",
   qualityFlow: [
     "1. Generate (create_diagram_from_prompt / create_from_template / create_from_repo_analysis).",
     "2. lint_drawing to find geometric/structural issues.",
     "3. score_drawing (0-100). The passing bar is the minimum score.",
-    `4. If score < ${config.minDrawingScore}: repair_drawing or auto_polish_drawing.`,
+    `4. If score < ${config.minDrawingScore}: repair_drawing, auto_polish_drawing, or run_repair_loop (server-driven geometry+style+icon loop).`,
+    "4b. score_drawing_visual for an aesthetic score (icon coverage, colour discipline, whitespace, legibility); recognized-node icons are auto-injected on create.",
     "5. save_drawing once it passes (or as a draft if low-score drafts are allowed).",
     "6. get_drawing_url / export_drawing to share.",
   ],

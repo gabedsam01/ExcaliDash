@@ -1,6 +1,6 @@
 /**
  * registerMcpServer — wires the MCP transport, auth, rate limiting and the
- * 25-tool registry onto the Express app at config.mcp.endpointPath (`/mcp`).
+ * 27-tool registry onto the Express app at config.mcp.endpointPath (`/mcp`).
  *
  * Mounted BEFORE the CSRF middleware in index.ts: `/mcp` is Bearer-authenticated
  * (no cookies), so it must not be subject to cookie-based CSRF.
