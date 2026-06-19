@@ -27,6 +27,177 @@ export type UpdateInfo = {
   error?: string;
 };
 
+export type ApiKeyClient = "claude-code" | "other";
+
+export type ApiKeySummary = {
+  id: string;
+  name: string;
+  client: ApiKeyClient | null;
+  preview: string;
+  prefix: string;
+  suffix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+export type CreatedApiKey = ApiKeySummary & {
+  token: string;
+};
+
+export const getApiKeys = async (): Promise<ApiKeySummary[]> => {
+  const response = await api.get<ApiKeySummary[]>("/api-keys");
+  return response.data;
+};
+
+export const createApiKey = async (params: {
+  name: string;
+  client: ApiKeyClient;
+}): Promise<CreatedApiKey> => {
+  const response = await api.post<CreatedApiKey>("/api-keys", params);
+  return response.data;
+};
+
+export const revokeApiKey = async (
+  id: string,
+): Promise<{ success: true }> => {
+  const response = await api.delete<{ success: true }>(`/api-keys/${id}`);
+  return response.data;
+};
+
+// --- Curated Excalidraw library packs (foundation for the future MCP server) ---
+
+export type LibrarySourceMode = "core" | "specialized" | "public";
+export type LibrarySearchMode = "core" | "specialized" | "public" | "all";
+
+export interface LibraryCatalogItem {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  sourceMode: LibrarySourceMode;
+  category?: string;
+  curated: boolean;
+  source: string;
+  preview?: string;
+  itemNames?: string[];
+  cached: boolean;
+  cachedAt?: string;
+  sha256?: string;
+  sizeBytes?: number;
+}
+
+export interface LibraryStatus {
+  catalogCount: number;
+  curatedCount: number;
+  lastRefreshedAt: string | null;
+  cacheDir: string;
+  publicSearchEnabled: boolean;
+  refreshIntervalHours: number;
+  autoRefreshOnStart: boolean;
+}
+
+export interface LibraryPackSummary {
+  slug: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  priority: number;
+  itemCount: number;
+}
+
+export interface LibraryCategorySummary extends LibraryPackSummary {
+  category: string | null;
+}
+
+export interface LibraryPacksOverview {
+  core: LibraryPackSummary | null;
+  specialized:
+    | (LibraryPackSummary & {
+        categoryCount: number;
+        categories: LibraryCategorySummary[];
+      })
+    | null;
+}
+
+export interface LibrarySearchResponse {
+  mode: LibrarySearchMode;
+  query: string;
+  category: string | null;
+  publicSearchEnabled: boolean;
+  count: number;
+  results: LibraryCatalogItem[];
+  warning?: string;
+}
+
+export interface LibraryCacheResult {
+  id: string;
+  source: string;
+  itemCount: number;
+  sha256: string;
+  sizeBytes: number;
+  cachedAt: string;
+  itemNames: string[];
+}
+
+export interface LibraryRefreshResult {
+  catalog:
+    | {
+        fetched: number;
+        upserted: number;
+        skipped: number;
+        errors: string[];
+        lastRefreshedAt: string | null;
+      }
+    | { skipped: true; reason: string };
+  packs: {
+    packsEnsured: number;
+    membershipResolved: number;
+    missing: { pack: string; name: string }[];
+    skippedReason?: string;
+  };
+  status: LibraryStatus;
+}
+
+export const getLibraryStatus = async (): Promise<LibraryStatus> => {
+  const response = await api.get<LibraryStatus>("/libraries/status");
+  return response.data;
+};
+
+export const refreshLibraries = async (): Promise<LibraryRefreshResult> => {
+  const response = await api.post<LibraryRefreshResult>(
+    "/libraries/refresh",
+    {},
+  );
+  return response.data;
+};
+
+export const getLibraryPacks = async (): Promise<LibraryPacksOverview> => {
+  const response = await api.get<LibraryPacksOverview>("/libraries/packs");
+  return response.data;
+};
+
+export const searchLibraries = async (params: {
+  q?: string;
+  mode?: LibrarySearchMode;
+  category?: string;
+  limit?: number;
+}): Promise<LibrarySearchResponse> => {
+  const response = await api.get<LibrarySearchResponse>("/libraries/search", {
+    params,
+  });
+  return response.data;
+};
+
+export const cacheLibrary = async (
+  id: string,
+): Promise<LibraryCacheResult> => {
+  const response = await api.post<LibraryCacheResult>(
+    `/libraries/${id}/cache`,
+    {},
+  );
+  return response.data;
+};
+
 export const getUpdateInfo = async (channel: UpdateChannel): Promise<UpdateInfo> => {
   const response = await api.get<UpdateInfo>("/system/update", { params: { channel } });
   return response.data;

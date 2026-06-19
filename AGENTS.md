@@ -17,9 +17,9 @@ Core user-facing features include organizing drawings into collections, search, 
   - Pin images to a specific release tag (or digest) instead of `:latest` for reproducible upgrades/rollbacks.
   - Stable tags are published as `zimengxiong/excalidash-backend:<VERSION>` and `zimengxiong/excalidash-frontend:<VERSION>` (and also `:latest`).
   - Pre-release tags are published as `:dev` and `:<VERSION>-dev` (and do not update `:latest`).
-  - Set fixed `JWT_SECRET` and `CSRF_SECRET` for portability and multi-instance/redeploy scenarios.
+  - Set fixed `JWT_SECRET`, `CSRF_SECRET`, and `API_KEY_SECRET` for portability and multi-instance/redeploy scenarios.
   - Set `FRONTEND_URL` to your public URL(s) and keep `TRUST_PROXY=false` unless you are behind a trusted proxy hop.
-  - Ensure the backend volume is backed up (SQLite DB + persisted secrets).
+  - Ensure backups cover the PostgreSQL database (`pg_dump`) and the persisted secrets volume.
 - Re-check production health:
   - `docker compose -f docker-compose.prod.yml ps`
   - `docker compose -f docker-compose.prod.yml logs backend --tail=200`
@@ -158,7 +158,7 @@ Dependencies:
 
 - Node.js 20+
 - npm
-- SQLite-supported environment (default)
+- PostgreSQL (local via the Docker Compose `postgres` service, or an external/managed PostgreSQL). `make dev` and the dev backend now require a running PostgreSQL.
 - Docker + Docker Compose if using compose path
 
 Install:
@@ -172,8 +172,9 @@ Start backend + frontend in tmux:
 - Backend dev env:
   - `cd backend`
   - `cp .env.example .env`
+  - start a local PostgreSQL: `docker compose up -d postgres`
   - `npx prisma generate`
-  - `npx prisma db push`
+  - `npx prisma migrate dev`
   - `npm run dev`
 - Frontend dev env:
   - `cd frontend`
@@ -212,12 +213,13 @@ Backend base variables:
 
 - `PORT` (default `8000`)
 - `NODE_ENV` (`development` / `production`)
-- `DATABASE_URL` (`file:...` default via `backend/.env` and resolver)
+- `DATABASE_URL` (PostgreSQL connection string, e.g. `postgresql://user:pass@postgres:5432/excalidash?schema=public`; host is the `postgres` compose service, or `localhost` for a host-run dev backend)
 - `FRONTEND_URL` (comma-separated allowed origins)
 - `TRUST_PROXY` (`true`, `false`, or positive hop count)
 - `AUTH_MODE` (`local`, `hybrid`, `oidc_enforced`)
 - `JWT_SECRET` (required when running backend with `NODE_ENV=production`; Docker entrypoint can auto-generate + persist for single-instance setups)
 - `CSRF_SECRET` (recommended for stable CSRF across restarts; Docker entrypoint can auto-generate + persist for single-instance setups)
+- `API_KEY_SECRET` (HMAC secret for API key verification; required for direct production starts, while the Docker entrypoint can auto-generate + persist it for single-instance setups)
 - `JWT_ACCESS_EXPIRES_IN` (default `15m`)
 - `JWT_REFRESH_EXPIRES_IN` (default `7d`)
 - `RATE_LIMIT_MAX_REQUESTS` (default `1000`)
@@ -250,7 +252,7 @@ Backend Docker/env control variables:
 
 - `RUN_MIGRATIONS` (`true`/`1` default true in entrypoint)
 - `MIGRATION_LOCK_TIMEOUT_SECONDS` (default `120`)
-- `JWT_SECRET` and `CSRF_SECRET` persistence support (`.jwt_secret`, `.csrf_secret` in volume)
+- `JWT_SECRET`, `CSRF_SECRET`, and `API_KEY_SECRET` persistence support (`.jwt_secret`, `.csrf_secret`, `.api_key_secret` in volume)
 
 Frontend variables:
 

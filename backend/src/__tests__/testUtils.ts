@@ -1,84 +1,65 @@
 /**
  * Test utilities for backend integration tests
+ *
+ * ExcaliDash is PostgreSQL-only. Integration tests run against a dedicated
+ * PostgreSQL database provided via DATABASE_URL (or DATABASE_URL_TEST). The
+ * schema is (re)created with `prisma db push --force-reset`, so point these
+ * variables at a throwaway test database — never a real one.
  */
 import { PrismaClient } from "../generated/client";
-import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 
-const TEST_DB_FILENAME = `test.${process.pid}.${Math.random().toString(16).slice(2)}.db`;
-const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", TEST_DB_FILENAME);
-const DB_PUSH_LOCK_PATH = path.resolve(__dirname, "../../prisma/.test-db-push.lock");
+const resolveTestDatabaseUrl = (): string => {
+  const url = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
 
-const sleepSync = (ms: number) => {
-  const shared = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(shared, 0, 0, ms);
-};
-
-const withDbPushLock = (fn: () => void) => {
-  const start = Date.now();
-  let fd: number | null = null;
-  while (fd === null) {
-    try {
-      fd = fs.openSync(DB_PUSH_LOCK_PATH, "wx");
-      fs.writeFileSync(fd, String(process.pid));
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== "EEXIST") throw error;
-      if (Date.now() - start > 30_000) {
-        throw new Error("Timed out waiting for Prisma db push lock");
-      }
-      sleepSync(50);
-    }
+  if (!url || url.trim().length === 0) {
+    throw new Error(
+      "Missing DATABASE_URL for tests. Set DATABASE_URL (or DATABASE_URL_TEST) to a " +
+        "PostgreSQL test database, e.g. " +
+        "postgresql://excalidash:excalidash@localhost:5432/excalidash_test?schema=public",
+    );
   }
 
-  try {
-    fn();
-  } finally {
-    try {
-      fs.closeSync(fd);
-    } catch {
-    }
-    try {
-      fs.unlinkSync(DB_PUSH_LOCK_PATH);
-    } catch {
-    }
+  if (/^file:/i.test(url) || /^sqlite:/i.test(url)) {
+    throw new Error(
+      "Tests require a PostgreSQL DATABASE_URL; SQLite is no longer supported.",
+    );
   }
+
+  return url.trim();
 };
+
+const TEST_DATABASE_URL = resolveTestDatabaseUrl();
+// Ensure the app config and the Prisma CLI all resolve the same database.
+process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 /**
- * Get a test Prisma client pointing to the test database
+ * Get a test Prisma client pointing to the PostgreSQL test database
  */
 export const getTestPrisma = () => {
-  const databaseUrl = `file:${TEST_DB_PATH}`;
-  process.env.DATABASE_URL = databaseUrl;
   return new PrismaClient({
     datasources: {
       db: {
-        url: databaseUrl,
+        url: TEST_DATABASE_URL,
       },
     },
   });
 };
 
 /**
- * Setup the test database by running migrations
+ * Setup the test database by (re)creating the schema from prisma/schema.prisma.
+ * Uses `db push --force-reset` so each run starts from a clean PostgreSQL schema.
  */
 export const setupTestDb = () => {
-  const databaseUrl = `file:${TEST_DB_PATH}`;
-  process.env.DATABASE_URL = databaseUrl;
-  
   try {
-    withDbPushLock(() => {
-      execSync("npx prisma db push --skip-generate --force-reset", {
-        cwd: path.resolve(__dirname, "../../"),
-        env: {
-          ...process.env,
-          DATABASE_URL: databaseUrl,
-          RUST_LOG: "info",
-        },
-        stdio: "pipe",
-      });
+    execSync("npx prisma db push --skip-generate --force-reset", {
+      cwd: path.resolve(__dirname, "../../"),
+      env: {
+        ...process.env,
+        DATABASE_URL: TEST_DATABASE_URL,
+      },
+      stdio: "pipe",
     });
   } catch (error) {
     console.error("Failed to setup test database:", error);

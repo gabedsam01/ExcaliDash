@@ -3,7 +3,13 @@
  */
 import dotenv from "dotenv";
 import crypto from "crypto";
-import path from "path";
+import {
+  loadRequestLimits,
+  RequestLimits,
+  summarizeRequestLimits,
+} from "./utils/limits";
+import type { LibraryConfig } from "./libraries/types";
+import type { McpConfig } from "./mcp/types";
 
 dotenv.config();
 
@@ -19,6 +25,7 @@ interface Config {
   rateLimitMaxRequests: number;
   csrfMaxRequests: number;
   csrfSecret: string | null;
+  apiKeySecret: string;
   oidc: OidcConfig;
   enablePasswordReset: boolean;
   enableRefreshTokenRotation: boolean;
@@ -26,6 +33,9 @@ interface Config {
   enforceHttpsRedirect: boolean;
   bootstrapSetupCodeTtlMs: number;
   bootstrapSetupCodeMaxAttempts: number;
+  limits: RequestLimits;
+  libraries: LibraryConfig;
+  mcp: McpConfig;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced";
@@ -144,6 +154,23 @@ const resolveJwtSecret = (nodeEnv: string): string => {
   return generated;
 };
 
+const resolveApiKeySecret = (nodeEnv: string): string => {
+  const provided = process.env.API_KEY_SECRET;
+  if (provided && provided.trim().length > 0) {
+    return provided;
+  }
+
+  if (nodeEnv === "production") {
+    throw new Error("Missing required environment variable: API_KEY_SECRET");
+  }
+
+  const generated = crypto.randomBytes(32).toString("hex");
+  console.warn(
+    "[security] API_KEY_SECRET is not set (non-production). Using an ephemeral secret; API keys will stop validating after restart.",
+  );
+  return generated;
+};
+
 const parseFrontendUrl = (raw: string | undefined): string | undefined => {
   if (!raw || raw.trim().length === 0) return undefined;
   const normalized = raw
@@ -154,32 +181,38 @@ const parseFrontendUrl = (raw: string | undefined): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const resolveDatabaseUrl = (rawUrl?: string) => {
-  const backendRoot = path.resolve(__dirname, "../");
-  const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
+/**
+ * ExcaliDash is PostgreSQL-only. SQLite (and any `file:` URL) is no longer
+ * supported. This validates DATABASE_URL early and fails fast with a clear,
+ * actionable message instead of silently falling back to a local file.
+ */
+const resolveDatabaseUrl = (rawUrl?: string): string => {
+  const trimmed = rawUrl?.trim();
 
-  if (!rawUrl || rawUrl.trim().length === 0) {
-    return `file:${defaultDbPath}`;
+  if (!trimmed) {
+    throw new Error(
+      "Missing required environment variable: DATABASE_URL. ExcaliDash " +
+        "requires a PostgreSQL connection string, e.g. " +
+        "postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public",
+    );
   }
 
-  if (!rawUrl.startsWith("file:")) {
-    return rawUrl;
+  if (/^file:/i.test(trimmed) || /^sqlite:/i.test(trimmed)) {
+    throw new Error(
+      "SQLite is no longer supported. DATABASE_URL must be a PostgreSQL " +
+        "connection string (postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public). " +
+        "Received a SQLite/file URL — update DATABASE_URL to point at PostgreSQL.",
+    );
   }
 
-  const filePath = rawUrl.replace(/^file:/, "");
-  const prismaDir = path.resolve(backendRoot, "prisma");
-  const normalizedRelative = filePath.replace(/^\.\/?/, "");
-  const hasLeadingPrismaDir =
-    normalizedRelative === "prisma" || normalizedRelative.startsWith("prisma/");
+  if (!/^postgres(ql)?:\/\//i.test(trimmed)) {
+    throw new Error(
+      "Invalid DATABASE_URL: ExcaliDash requires a PostgreSQL connection " +
+        "string starting with postgresql:// (or postgres://).",
+    );
+  }
 
-  const absolutePath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(
-        hasLeadingPrismaDir ? backendRoot : prismaDir,
-        normalizedRelative,
-      );
-
-  return `file:${absolutePath}`;
+  return trimmed;
 };
 
 process.env.DATABASE_URL = resolveDatabaseUrl(process.env.DATABASE_URL);
@@ -297,20 +330,132 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
   };
 };
 
+const DEFAULT_LIBRARIES_CATALOG_URL =
+  "https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json";
+const DEFAULT_LIBRARIES_BASE_URL =
+  "https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries";
+
+/**
+ * Curated Excalidraw library packs configuration. Only the official Excalidraw
+ * catalog host is reachable (enforced at fetch time, see libraries/validators).
+ */
+const resolveLibraryConfig = (): LibraryConfig => {
+  const downloadMaxMb = getRequiredEnvNumber("LIBRARY_DOWNLOAD_MAX_MB", 25);
+  return {
+    catalogUrl: getOptionalEnv(
+      "EXCALIDRAW_LIBRARIES_CATALOG_URL",
+      DEFAULT_LIBRARIES_CATALOG_URL,
+    ),
+    baseUrl: getOptionalEnv(
+      "EXCALIDRAW_LIBRARIES_BASE_URL",
+      DEFAULT_LIBRARIES_BASE_URL,
+    ),
+    cacheDir: getOptionalEnv("LIBRARY_CACHE_DIR", "/app/data/libraries"),
+    refreshIntervalHours: getRequiredEnvNumber(
+      "LIBRARY_REFRESH_INTERVAL_HOURS",
+      24,
+    ),
+    downloadTimeoutMs: getRequiredEnvNumber("LIBRARY_DOWNLOAD_TIMEOUT_MS", 15000),
+    downloadMaxBytes: Math.trunc(downloadMaxMb * 1024 * 1024),
+    publicSearchEnabled: getOptionalBoolean(
+      "LIBRARY_PUBLIC_SEARCH_ENABLED",
+      true,
+    ),
+    publicSearchMaxResults: getRequiredEnvNumber(
+      "LIBRARY_PUBLIC_SEARCH_MAX_RESULTS",
+      25,
+    ),
+    autoRefreshOnStart: getOptionalBoolean(
+      "LIBRARY_AUTO_REFRESH_ON_START",
+      true,
+    ),
+  };
+};
+
+/**
+ * ExcaliDash MCP server configuration. The MCP exposes exactly 25 drawing tools
+ * at MCP_ENDPOINT_PATH, authenticated by Bearer `exd_` API keys.
+ */
+const resolveMcpConfig = (): McpConfig => {
+  const clampScore = (key: string, fallback: number): number => {
+    const raw = process.env[key];
+    if (!raw) return fallback;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      throw new Error(`Invalid ${key}: must be a number between 0 and 100`);
+    }
+    return Math.max(0, Math.min(100, Math.trunc(parsed)));
+  };
+
+  const allowedLibraryModes = new Set([
+    "curated",
+    "all",
+    "core",
+    "specialized",
+    "public",
+  ]);
+  const libraryMode = getOptionalEnv(
+    "MCP_DEFAULT_LIBRARY_MODE",
+    "curated",
+  ).trim();
+  if (!allowedLibraryModes.has(libraryMode)) {
+    throw new Error(
+      `Invalid MCP_DEFAULT_LIBRARY_MODE: must be one of ${Array.from(
+        allowedLibraryModes,
+      ).join(", ")}`,
+    );
+  }
+
+  let endpointPath = getOptionalEnv("MCP_ENDPOINT_PATH", "/mcp").trim();
+  if (!endpointPath.startsWith("/")) endpointPath = `/${endpointPath}`;
+  endpointPath = endpointPath.replace(/\/+$/, "") || "/mcp";
+
+  const allowedLibraryUsageModes = new Set(["off", "curated", "required"]);
+  const libraryUsageMode = getOptionalEnv("MCP_LIBRARY_MODE", "curated")
+    .trim()
+    .toLowerCase();
+  if (!allowedLibraryUsageModes.has(libraryUsageMode)) {
+    throw new Error(
+      `Invalid MCP_LIBRARY_MODE: must be one of off, curated, required`,
+    );
+  }
+
+  return {
+    enabled: getOptionalBoolean("MCP_ENABLED", true),
+    endpointPath,
+    minDrawingScore: clampScore("MCP_MIN_DRAWING_SCORE", 95),
+    maxRepairAttempts: getRequiredEnvNumber("MCP_MAX_REPAIR_ATTEMPTS", 5),
+    allowLowScoreDraft: getOptionalBoolean("MCP_ALLOW_LOW_SCORE_DRAFT", true),
+    maxElements: getRequiredEnvNumber("MCP_MAX_ELEMENTS", 5000),
+    maxExportMb: getRequiredEnvNumber("MCP_MAX_EXPORT_MB", 100),
+    defaultLibraryMode: libraryMode as McpConfig["defaultLibraryMode"],
+    libraryMode: libraryUsageMode as McpConfig["libraryMode"],
+    publicSearchEnabled: getOptionalBoolean("MCP_PUBLIC_SEARCH_ENABLED", false),
+    rateLimitWindowSeconds: getRequiredEnvNumber(
+      "MCP_RATE_LIMIT_WINDOW_SECONDS",
+      900,
+    ),
+    rateLimitMax: getRequiredEnvNumber("MCP_RATE_LIMIT_MAX", 300),
+    validateOrigin: getOptionalBoolean("MCP_VALIDATE_ORIGIN", true),
+  };
+};
+
+const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 
 export const config: Config = {
   port: getRequiredEnvNumber("PORT", 8000),
-  nodeEnv: getOptionalEnv("NODE_ENV", "development"),
+  nodeEnv: resolvedNodeEnv,
   databaseUrl: process.env.DATABASE_URL,
   frontendUrl: parseFrontendUrl(process.env.FRONTEND_URL),
   authMode: resolvedAuthMode,
-  jwtSecret: resolveJwtSecret(getOptionalEnv("NODE_ENV", "development")),
+  jwtSecret: resolveJwtSecret(resolvedNodeEnv),
   jwtAccessExpiresIn: getOptionalEnv("JWT_ACCESS_EXPIRES_IN", "15m"),
   jwtRefreshExpiresIn: getOptionalEnv("JWT_REFRESH_EXPIRES_IN", "7d"),
   rateLimitMaxRequests: getRequiredEnvNumber("RATE_LIMIT_MAX_REQUESTS", 1000),
   csrfMaxRequests: getRequiredEnvNumber("CSRF_MAX_REQUESTS", 60),
   csrfSecret: process.env.CSRF_SECRET || null,
+  apiKeySecret: resolveApiKeySecret(resolvedNodeEnv),
   oidc: resolveOidcConfig(resolvedAuthMode),
   enablePasswordReset: getOptionalBoolean("ENABLE_PASSWORD_RESET", false),
   enableRefreshTokenRotation: getOptionalBoolean(
@@ -327,13 +472,21 @@ export const config: Config = {
     "BOOTSTRAP_SETUP_CODE_MAX_ATTEMPTS",
     10,
   ),
+  limits: loadRequestLimits(),
+  libraries: resolveLibraryConfig(),
+  mcp: resolveMcpConfig(),
 };
 
 if (config.nodeEnv === "production") {
   const normalizedSecret = config.jwtSecret.trim();
+  const normalizedApiKeySecret = config.apiKeySecret.trim();
   const insecureJwtSecretPlaceholders = new Set([
     "your-secret-key-change-in-production",
     "change-this-secret-in-production-min-32-chars",
+  ]);
+  const insecureApiKeySecretPlaceholders = new Set([
+    "change_me_strong_random_secret",
+    "change-this-api-key-secret-in-production",
   ]);
 
   if (config.jwtSecret.length < 32) {
@@ -346,6 +499,16 @@ if (config.nodeEnv === "production") {
       "JWT_SECRET must be changed from placeholder/default value in production",
     );
   }
+  if (config.apiKeySecret.length < 32) {
+    throw new Error(
+      "API_KEY_SECRET must be at least 32 characters long in production",
+    );
+  }
+  if (insecureApiKeySecretPlaceholders.has(normalizedApiKeySecret)) {
+    throw new Error(
+      "API_KEY_SECRET must be changed from placeholder/default value in production",
+    );
+  }
   if (
     config.oidc.enabled &&
     config.oidc.redirectUri &&
@@ -356,3 +519,7 @@ if (config.nodeEnv === "production") {
 }
 
 console.log("Configuration validated successfully");
+console.log(
+  "[config] Effective payload/import limits:",
+  summarizeRequestLimits(config.limits),
+);

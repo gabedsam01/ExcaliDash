@@ -8,17 +8,28 @@
  *   node scripts/admin-recover.cjs --identifier admin@example.com --generate
  *
  * Notes:
- * - Works with SQLite DATABASE_URL (default: file:./prisma/dev.db).
+ * - ExcaliDash is PostgreSQL-only. DATABASE_URL must be a PostgreSQL connection
+ *   string (e.g. postgresql://USER:PASSWORD@HOST:5432/DBNAME?schema=public).
  * - Sets the password hash and clears mustResetPassword by default.
  * - If there are no active admins, this script can promote the target user to ADMIN.
  */
 
 require("dotenv").config();
 
-const path = require("path");
-process.env.DATABASE_URL =
-  process.env.DATABASE_URL ||
-  `file:${path.resolve(__dirname, "../prisma/dev.db")}`;
+const databaseUrl = process.env.DATABASE_URL
+  ? String(process.env.DATABASE_URL).trim()
+  : "";
+
+if (!databaseUrl || /^file:/i.test(databaseUrl) || /^sqlite:/i.test(databaseUrl)) {
+  console.error(
+    "Missing or unsupported DATABASE_URL. ExcaliDash is PostgreSQL-only; " +
+      "set a PostgreSQL connection string, e.g.\n" +
+      "  DATABASE_URL=postgresql://excalidash:change_me_strong_password@localhost:5432/excalidash?schema=public",
+  );
+  process.exit(1);
+}
+
+process.env.DATABASE_URL = databaseUrl;
 
 const { PrismaClient } = require("../src/generated/client");
 const bcrypt = require("bcrypt");

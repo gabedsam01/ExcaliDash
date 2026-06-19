@@ -1,21 +1,82 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-excalidash}
+      POSTGRES_USER: ${POSTGRES_USER:-excalidash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_strong_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - excalidash-network
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-excalidash} -d ${POSTGRES_DB:-excalidash}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: excalidash-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
-      - PORT=8000
-      - NODE_ENV=production
-      - AUTH_MODE=local
-      - FRONTEND_URL=https://excalidash.gabedsam01.shop
-      - TRUST_PROXY=1
-      - ENFORCE_HTTPS_REDIRECT=false
-      - JWT_SECRET=super_secret_hash_gabriel_2026_!@#
-      - CSRF_SECRET=outra_senha_secreta_gabriel_123
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-excalidash}:${POSTGRES_PASSWORD:-change_me_strong_password}@postgres:5432/${POSTGRES_DB:-excalidash}?schema=public}
+      PORT: ${PORT:-8000}
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:6767}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      ENFORCE_HTTPS_REDIRECT: ${ENFORCE_HTTPS_REDIRECT:-false}
+      JWT_SECRET: ${JWT_SECRET:-}
+      CSRF_SECRET: ${CSRF_SECRET:-}
+      API_KEY_SECRET: ${API_KEY_SECRET:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-250}
+      MAX_JSON_BODY_MB: ${MAX_JSON_BODY_MB:-100}
+      MAX_URLENCODED_BODY_MB: ${MAX_URLENCODED_BODY_MB:-100}
+      MAX_SOCKET_PAYLOAD_MB: ${MAX_SOCKET_PAYLOAD_MB:-100}
+      MAX_IMPORT_DRAWING_MB: ${MAX_IMPORT_DRAWING_MB:-100}
+      MAX_IMPORT_MANIFEST_MB: ${MAX_IMPORT_MANIFEST_MB:-10}
+      MAX_IMPORT_TOTAL_EXTRACTED_MB: ${MAX_IMPORT_TOTAL_EXTRACTED_MB:-500}
+      MAX_DATA_URL_MB: ${MAX_DATA_URL_MB:-100}
+      MAX_IMPORT_ARCHIVE_ENTRIES: ${MAX_IMPORT_ARCHIVE_ENTRIES:-10000}
+      MAX_IMPORT_COLLECTIONS: ${MAX_IMPORT_COLLECTIONS:-2000}
+      MAX_IMPORT_DRAWINGS: ${MAX_IMPORT_DRAWINGS:-10000}
+      # Curated Excalidraw library packs (foundation for the future MCP server).
+      LIBRARY_CACHE_DIR: ${LIBRARY_CACHE_DIR:-/app/data/libraries}
+      LIBRARY_PUBLIC_SEARCH_ENABLED: ${LIBRARY_PUBLIC_SEARCH_ENABLED:-true}
+      LIBRARY_AUTO_REFRESH_ON_START: ${LIBRARY_AUTO_REFRESH_ON_START:-true}
+      LIBRARY_REFRESH_INTERVAL_HOURS: ${LIBRARY_REFRESH_INTERVAL_HOURS:-24}
+      LIBRARY_DOWNLOAD_TIMEOUT_MS: ${LIBRARY_DOWNLOAD_TIMEOUT_MS:-15000}
+      LIBRARY_DOWNLOAD_MAX_MB: ${LIBRARY_DOWNLOAD_MAX_MB:-25}
+      LIBRARY_PUBLIC_SEARCH_MAX_RESULTS: ${LIBRARY_PUBLIC_SEARCH_MAX_RESULTS:-25}
+      EXCALIDRAW_LIBRARIES_CATALOG_URL: ${EXCALIDRAW_LIBRARIES_CATALOG_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries.json}
+      EXCALIDRAW_LIBRARIES_BASE_URL: ${EXCALIDRAW_LIBRARIES_BASE_URL:-https://raw.githubusercontent.com/excalidraw/excalidraw-libraries/main/libraries}
+      # ExcaliDash MCP server (/mcp): 25 drawing tools, Bearer exd_ auth.
+      MCP_ENABLED: ${MCP_ENABLED:-true}
+      MCP_ENDPOINT_PATH: ${MCP_ENDPOINT_PATH:-/mcp}
+      MCP_MIN_DRAWING_SCORE: ${MCP_MIN_DRAWING_SCORE:-95}
+      MCP_MAX_REPAIR_ATTEMPTS: ${MCP_MAX_REPAIR_ATTEMPTS:-5}
+      MCP_ALLOW_LOW_SCORE_DRAFT: ${MCP_ALLOW_LOW_SCORE_DRAFT:-true}
+      MCP_MAX_ELEMENTS: ${MCP_MAX_ELEMENTS:-5000}
+      MCP_MAX_EXPORT_MB: ${MCP_MAX_EXPORT_MB:-100}
+      MCP_DEFAULT_LIBRARY_MODE: ${MCP_DEFAULT_LIBRARY_MODE:-curated}
+      MCP_PUBLIC_SEARCH_ENABLED: ${MCP_PUBLIC_SEARCH_ENABLED:-false}
+      MCP_RATE_LIMIT_WINDOW_SECONDS: ${MCP_RATE_LIMIT_WINDOW_SECONDS:-900}
+      MCP_RATE_LIMIT_MAX: ${MCP_RATE_LIMIT_MAX:-300}
+      MCP_VALIDATE_ORIGIN: ${MCP_VALIDATE_ORIGIN:-true}
     volumes:
       - backend-data:/app/prisma
+      - library-data:/app/data
     networks:
       - excalidash-network
     restart: unless-stopped
@@ -36,13 +97,16 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    container_name: excalidash-frontend
     ports:
-      - "6767:80"
+      - "${FRONTEND_PORT:-6767}:80"
     environment:
-      # Backend URL for nginx proxy (host:port format, no protocol)
-      # Override for reverse proxy setups (e.g., excalidash-backend.svc.cluster.local:8000)
-      - BACKEND_URL=backend:8000
+      BACKEND_URL: ${BACKEND_URL:-backend:8000}
+      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-250M}
+      NGINX_PROXY_CONNECT_TIMEOUT: ${NGINX_PROXY_CONNECT_TIMEOUT:-300s}
+      NGINX_PROXY_SEND_TIMEOUT: ${NGINX_PROXY_SEND_TIMEOUT:-300s}
+      NGINX_PROXY_READ_TIMEOUT: ${NGINX_PROXY_READ_TIMEOUT:-300s}
+      NGINX_WEBSOCKET_READ_TIMEOUT: ${NGINX_WEBSOCKET_READ_TIMEOUT:-3600s}
+      NGINX_WEBSOCKET_SEND_TIMEOUT: ${NGINX_WEBSOCKET_SEND_TIMEOUT:-3600s}
     depends_on:
       - backend
     networks:
@@ -69,3 +133,5 @@ networks:
 
 volumes:
   backend-data:
+  library-data:
+  postgres_data:

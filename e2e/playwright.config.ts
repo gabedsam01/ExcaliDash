@@ -76,7 +76,9 @@ export default defineConfig({
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        DATABASE_URL: "file:./dev.db",
+        DATABASE_URL:
+          process.env.DATABASE_URL ||
+          "postgresql://excalidash:excalidash@localhost:5432/excalidash_e2e?schema=public",
         FRONTEND_URL,
         CSRF_MAX_REQUESTS: "1000",
       },

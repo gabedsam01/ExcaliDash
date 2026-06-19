@@ -10,29 +10,30 @@ const BOOTSTRAP_USER_ID = "bootstrap-admin";
 const DEFAULT_SYSTEM_CONFIG_ID = "default";
 const backendRoot = path.resolve(__dirname, "..");
 
+// ExcaliDash is PostgreSQL-only. Require a PostgreSQL DATABASE_URL and fail fast
+// (with a clear message) instead of silently defaulting to a local SQLite file
+// like older versions did.
 const resolveDatabaseUrl = (rawUrl) => {
-  const backendRoot = path.resolve(__dirname, "..");
-  const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
+  const trimmed = rawUrl ? String(rawUrl).trim() : "";
 
-  if (!rawUrl || String(rawUrl).trim().length === 0) {
-    return `file:${defaultDbPath}`;
+  if (!trimmed) {
+    console.error(
+      "[simulate-auth-onboarding] Missing DATABASE_URL. ExcaliDash requires a PostgreSQL connection string, e.g.\n" +
+        "  DATABASE_URL=postgresql://excalidash:change_me_strong_password@localhost:5432/excalidash?schema=public\n" +
+        "Start a local database with: docker compose up -d postgres",
+    );
+    process.exit(1);
   }
 
-  if (!String(rawUrl).startsWith("file:")) {
-    return String(rawUrl);
+  if (/^file:/i.test(trimmed) || /^sqlite:/i.test(trimmed)) {
+    console.error(
+      "[simulate-auth-onboarding] SQLite is no longer supported. DATABASE_URL must point at PostgreSQL " +
+        "(postgresql://...). Update your backend/.env or environment.",
+    );
+    process.exit(1);
   }
 
-  const filePath = String(rawUrl).replace(/^file:/, "");
-  const prismaDir = path.resolve(backendRoot, "prisma");
-  const normalizedRelative = filePath.replace(/^\.\/?/, "");
-  const hasLeadingPrismaDir =
-    normalizedRelative === "prisma" || normalizedRelative.startsWith("prisma/");
-
-  const absolutePath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(hasLeadingPrismaDir ? backendRoot : prismaDir, normalizedRelative);
-
-  return `file:${absolutePath}`;
+  return trimmed;
 };
 
 process.env.DATABASE_URL = resolveDatabaseUrl(process.env.DATABASE_URL);

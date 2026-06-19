@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Native build deps for modules that may compile from source (e.g., better-sqlite3 on arm64)
+# Native build deps for modules that may compile from source (e.g., bcrypt on arm64/musl)
 RUN apk add --no-cache python3 make g++
 
 # Copy package files
@@ -55,7 +55,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/generated ./dist/generated
 
 # Create necessary directories (ownership will be set in entrypoint)
-RUN mkdir -p /app/uploads /app/prisma
+# /app/data holds the cached .excalidrawlib library files (LIBRARY_CACHE_DIR).
+RUN mkdir -p /app/uploads /app/prisma /app/data
 
 # Copy and set permissions for entrypoint script
 COPY docker-entrypoint.sh ./

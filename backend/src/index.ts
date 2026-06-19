@@ -5,7 +5,6 @@ import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { Worker } from "worker_threads";
 import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
@@ -19,6 +18,7 @@ import {
   sanitizeSvg,
   elementSchema,
   appStateSchema,
+  configureSecuritySettings,
 } from "./security";
 import { config } from "./config";
 import { authModeService, requireAuth, optionalAuth } from "./middleware/auth";
@@ -37,6 +37,14 @@ import {
   getHttpsRedirectUrl,
 } from "./server/httpsRedirectPolicy";
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode";
+import { registerApiKeyRoutes } from "./apiKeys/routes";
+import {
+  createLibraryServices,
+  registerLibraryRoutes,
+  seedLibraries,
+  type LibraryPrisma,
+} from "./libraries";
+import { registerMcpServer } from "./mcp";
 
 const backendRoot = path.resolve(__dirname, "../");
 console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
@@ -82,14 +90,11 @@ const isAllowedOrigin = (origin?: string): boolean => {
 };
 
 const uploadDir = path.resolve(__dirname, "../uploads");
-const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
 const MAX_PAGE_SIZE = 200;
-const MAX_IMPORT_ARCHIVE_ENTRIES = 6000;
-const MAX_IMPORT_COLLECTIONS = 1000;
-const MAX_IMPORT_DRAWINGS = 5000;
-const MAX_IMPORT_MANIFEST_BYTES = 2 * 1024 * 1024;
-const MAX_IMPORT_DRAWING_BYTES = 5 * 1024 * 1024;
-const MAX_IMPORT_TOTAL_EXTRACTED_BYTES = 120 * 1024 * 1024;
+
+configureSecuritySettings({
+  maxDataUrlSize: config.limits.dataUrl.bytes,
+});
 
 let cachedBackendVersion: string | null = null;
 const getBackendVersion = (): string => {
@@ -138,7 +143,7 @@ const io = new Server(httpServer, {
     origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)),
     credentials: true,
   },
-  maxHttpBufferSize: 50 * 1024 * 1024,
+  maxHttpBufferSize: config.limits.socketPayload.bytes,
 });
 const parseJsonField = <T>(
   rawValue: string | null | undefined,
@@ -202,19 +207,8 @@ const PORT = config.port;
 const upload = multer({
   dest: uploadDir,
   limits: {
-    fileSize: MAX_UPLOAD_SIZE_BYTES,
+    fileSize: config.limits.upload.bytes,
     files: 1,
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.fieldname === "db") {
-      const isSqliteDb =
-        file.originalname.endsWith(".db") ||
-        file.originalname.endsWith(".sqlite");
-      if (!isSqliteDb) {
-        return cb(new Error("Only .db or .sqlite files are allowed"));
-      }
-    }
-    cb(null, true);
   },
 });
 
@@ -270,8 +264,13 @@ app.use(
     exposedHeaders: ["x-csrf-token", "x-request-id"],
   })
 );
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: config.limits.jsonBody.bytes }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: config.limits.urlencodedBody.bytes,
+  }),
+);
 
 app.use((req, res, next) => {
   const requestId = req.headers["x-request-id"] || "unknown";
@@ -314,6 +313,16 @@ const generalRateLimiter = rateLimit({
 });
 
 app.use(generalRateLimiter);
+
+// ExcaliDash MCP server (/mcp). Mounted BEFORE CSRF: it is Bearer-API-key
+// authenticated (no cookies), has its own rate limiter and Origin validation,
+// and must not be subject to cookie-based CSRF or the onboarding gate.
+registerMcpServer(app, {
+  prisma,
+  config,
+  isAllowedOrigin,
+  serverVersion: getBackendVersion(),
+});
 
 registerCsrfProtection({
   app,
@@ -444,79 +453,6 @@ const respondWithValidationErrors = (
 
 const collectionNameSchema = z.string().trim().min(1).max(100);
 
-const validateSqliteHeader = (filePath: string): boolean => {
-  try {
-    const buffer = Buffer.alloc(16);
-    const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
-
-    if (bytesRead < 16) {
-      console.warn("File too small to be a valid SQLite database");
-      return false;
-    }
-
-    const expectedHeader = Buffer.from([
-      0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61,
-      0x74, 0x20, 0x33, 0x00,
-    ]);
-
-    const isValid = buffer.equals(expectedHeader);
-    if (!isValid) {
-      console.warn("Invalid SQLite file header detected", {
-        filePath,
-        header: buffer.toString("hex"),
-        expected: expectedHeader.toString("hex"),
-      });
-    }
-
-    return isValid;
-  } catch (error) {
-    console.error("Failed to validate SQLite header:", error);
-    return false;
-  }
-};
-const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
-  if (!validateSqliteHeader(filePath)) {
-    return Promise.resolve(false);
-  }
-
-  return new Promise((resolve) => {
-    const worker = new Worker(
-      path.resolve(__dirname, "./workers/db-verify.js"),
-      {
-        workerData: { filePath },
-      }
-    );
-    let timeoutHandle: NodeJS.Timeout;
-    let settled = false;
-
-    const finish = (result: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      resolve(result);
-    };
-
-    worker.on("message", (isValid: boolean) => finish(isValid));
-    worker.on("error", (err) => {
-      console.error("Worker error:", err);
-      finish(false);
-    });
-    worker.on("exit", (code) => {
-      if (code !== 0) {
-        finish(false);
-      }
-    });
-
-    timeoutHandle = setTimeout(() => {
-      console.warn("Integrity check worker timed out", { filePath });
-      worker.terminate();
-      finish(false);
-    }, 10000);
-  });
-};
-
 const removeFileIfExists = async (filePath?: string) => {
   if (!filePath) return;
   try {
@@ -608,6 +544,25 @@ registerSystemRoutes(app, {
   getBackendVersion,
 });
 
+registerApiKeyRoutes(app, {
+  prisma,
+  requireAuth,
+  asyncHandler,
+  apiKeySecret: config.apiKeySecret,
+});
+
+// Curated Excalidraw library packs (foundation for the future MCP server).
+const libraryServices = createLibraryServices({
+  prisma: prisma as unknown as LibraryPrisma,
+  config: config.libraries,
+});
+
+registerLibraryRoutes(app, {
+  requireAuth,
+  asyncHandler,
+  services: libraryServices,
+});
+
 registerDashboardRoutes(app, {
   prisma,
   requireAuth,
@@ -645,13 +600,7 @@ registerImportExportRoutes({
   ensureTrashCollection,
   invalidateDrawingsCache,
   removeFileIfExists,
-  verifyDatabaseIntegrityAsync,
-  MAX_IMPORT_ARCHIVE_ENTRIES,
-  MAX_IMPORT_COLLECTIONS,
-  MAX_IMPORT_DRAWINGS,
-  MAX_IMPORT_MANIFEST_BYTES,
-  MAX_IMPORT_DRAWING_BYTES,
-  MAX_IMPORT_TOTAL_EXTRACTED_BYTES,
+  limits: config.limits,
 });
 
 app.use(errorHandler);
@@ -691,6 +640,34 @@ if (isMain) {
     } catch (error) {
       console.error("Failed to issue bootstrap setup code:", error);
     }
+
+    // Curated library packs: always ensure packs exist; optionally refresh the
+    // official catalog + resolve membership in the background. Failures here
+    // (e.g. no network) must never crash startup.
+    try {
+      await libraryServices.packService.seedPacks();
+      if (config.libraries.autoRefreshOnStart) {
+        void seedLibraries({
+          catalogService: libraryServices.catalogService,
+          packService: libraryServices.packService,
+        })
+          .then((result) => {
+            const catalogSummary =
+              "fetched" in result.catalog
+                ? `catalog=${result.catalog.upserted}/${result.catalog.fetched}`
+                : `catalog=skipped (${result.catalog.reason})`;
+            console.log(
+              `[libraries] startup seed: ${catalogSummary} curatedMissing=${result.packs.missing.length}`,
+            );
+          })
+          .catch((error) => {
+            console.error("[libraries] startup seed failed:", error);
+          });
+      }
+    } catch (error) {
+      console.error("[libraries] pack seed failed:", error);
+    }
+
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${config.nodeEnv}`);
     console.log(`Frontend URL: ${config.frontendUrl}`);
