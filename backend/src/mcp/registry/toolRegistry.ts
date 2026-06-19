@@ -20,6 +20,11 @@ import { autoPolish } from "../quality/autopolish";
 import { generateDiagramScene } from "../generate/diagram";
 import { injectConceptIcons } from "../generate/iconInjection";
 import { runRepairLoop } from "../quality/repairLoop";
+import { ensureLegend } from "../templates/legend";
+import {
+  ARCHITECTURE_LINT_OVERRIDES,
+  isArchitectureDiagram,
+} from "../templates/visualTokens";
 import {
   blendScore,
   scoreVisualFromPixels,
@@ -153,10 +158,17 @@ const polishAndMaybeSave = async (
     autoPolish?: boolean;
     createVersion?: boolean;
     allowDraft?: boolean;
+    architecture?: boolean;
+    presetId?: string;
   },
   ctx: ToolContext,
 ) => {
   const lintOverrides = strictLintOptions(ctx.config);
+  // Architecture diagrams additionally enforce icon + legend + rich-shape gates
+  // (warning-level). These are satisfied by auto-injection + the legend below.
+  const finalOverrides = args.architecture
+    ? { ...lintOverrides, ...ARCHITECTURE_LINT_OVERRIDES }
+    : lintOverrides;
   let finalScene = scene;
   let polish: ReturnType<typeof autoPolish> | null = null;
   if (args.autoPolish !== false) {
@@ -181,7 +193,15 @@ const polishAndMaybeSave = async (
     injectedIcons = injection.injected;
   }
 
-  const score = scoreScene(finalScene, ctx.config.minDrawingScore, lintOverrides);
+  // Architecture diagrams ship a legend (unless one is already present).
+  let legendAdded = false;
+  if (args.architecture) {
+    const withLegend = ensureLegend(finalScene, args.presetId);
+    finalScene = withLegend.scene;
+    legendAdded = withLegend.added;
+  }
+
+  const score = scoreScene(finalScene, ctx.config.minDrawingScore, finalOverrides);
 
   let saved: { drawingId: string; editUrl: string | null } | null = null;
   const allowDraft = args.allowDraft ?? ctx.config.allowLowScoreDraft;
@@ -214,6 +234,7 @@ const polishAndMaybeSave = async (
     scene: finalScene,
     elementCount: finalScene.elements.length,
     injectedIcons,
+    legendAdded,
     score,
     polish: polish
       ? { attempts: polish.attempts, passed: polish.passed, history: polish.history }
@@ -319,6 +340,11 @@ export const buildToolRegistry = (): McpTool[] => {
           save: args.save as boolean | undefined,
           name: (args.name as string) ?? (args.title as string),
           autoPolish: args.autoPolish as boolean | undefined,
+          architecture: isArchitectureDiagram(
+            args.diagramType as string,
+            args.prompt as string,
+          ),
+          presetId: args.preset as string | undefined,
         },
         ctx,
       );
@@ -847,6 +873,8 @@ export const buildToolRegistry = (): McpTool[] => {
           save: args.save as boolean | undefined,
           name: (args.name as string) ?? "Repository Architecture",
           autoPolish: args.autoPolish as boolean | undefined,
+          architecture: true,
+          presetId: args.preset as string | undefined,
         },
         ctx,
       );
@@ -883,6 +911,8 @@ export const buildToolRegistry = (): McpTool[] => {
           save: args.save as boolean | undefined,
           name: (args.name as string) ?? applied.pattern,
           autoPolish: args.autoPolish as boolean | undefined,
+          architecture: true,
+          presetId: args.preset as string | undefined,
         },
         ctx,
       );
