@@ -8,7 +8,9 @@ backend/prisma/*.backup
 # Docker-entrypoint persisted secrets/locks (in case prisma volume is bind-mounted)
 backend/prisma/.jwt_secret
 backend/prisma/.csrf_secret
+backend/prisma/.api_key_secret
 backend/prisma/.migration-lock/
+backend/data/secrets.env
 
 # Local OIDC/Keycloak dev files
 docker-compose.oidc.local.yml

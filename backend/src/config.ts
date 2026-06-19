@@ -2,7 +2,6 @@
  * Configuration validation and environment variable management
  */
 import dotenv from "dotenv";
-import crypto from "crypto";
 import {
   loadRequestLimits,
   RequestLimits,
@@ -10,12 +9,18 @@ import {
 } from "./utils/limits";
 import type { LibraryConfig } from "./libraries/types";
 import type { McpConfig } from "./mcp/types";
+import {
+  resolveRuntimeSecrets,
+  type RuntimeSecretMetadata,
+  type RuntimeSecretKey,
+} from "./runtimeSecrets";
 
 dotenv.config();
 
-interface Config {
+export interface Config {
   port: number;
   nodeEnv: string;
+  appUrl: string;
   databaseUrl?: string;
   frontendUrl?: string;
   authMode: AuthMode;
@@ -24,7 +29,7 @@ interface Config {
   jwtRefreshExpiresIn: string;
   rateLimitMaxRequests: number;
   csrfMaxRequests: number;
-  csrfSecret: string | null;
+  csrfSecret: string;
   apiKeySecret: string;
   oidc: OidcConfig;
   enablePasswordReset: boolean;
@@ -36,6 +41,7 @@ interface Config {
   limits: RequestLimits;
   libraries: LibraryConfig;
   mcp: McpConfig;
+  runtimeSecrets: Record<RuntimeSecretKey, RuntimeSecretMetadata>;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced";
@@ -135,40 +141,6 @@ const parseCsvEnvList = (key: string): string[] => {
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
-};
-
-const resolveJwtSecret = (nodeEnv: string): string => {
-  const provided = process.env.JWT_SECRET;
-  if (provided && provided.trim().length > 0) {
-    return provided;
-  }
-
-  if (nodeEnv === "production") {
-    throw new Error("Missing required environment variable: JWT_SECRET");
-  }
-
-  const generated = crypto.randomBytes(32).toString("hex");
-  console.warn(
-    "[security] JWT_SECRET is not set (non-production). Using an ephemeral secret; tokens will be invalidated on restart.",
-  );
-  return generated;
-};
-
-const resolveApiKeySecret = (nodeEnv: string): string => {
-  const provided = process.env.API_KEY_SECRET;
-  if (provided && provided.trim().length > 0) {
-    return provided;
-  }
-
-  if (nodeEnv === "production") {
-    throw new Error("Missing required environment variable: API_KEY_SECRET");
-  }
-
-  const generated = crypto.randomBytes(32).toString("hex");
-  console.warn(
-    "[security] API_KEY_SECRET is not set (non-production). Using an ephemeral secret; API keys will stop validating after restart.",
-  );
-  return generated;
 };
 
 const parseFrontendUrl = (raw: string | undefined): string | undefined => {
@@ -442,20 +414,25 @@ const resolveMcpConfig = (): McpConfig => {
 
 const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
+const runtimeSecrets = resolveRuntimeSecrets({ nodeEnv: resolvedNodeEnv });
 
 export const config: Config = {
   port: getRequiredEnvNumber("PORT", 8000),
   nodeEnv: resolvedNodeEnv,
+  appUrl: getOptionalEnv(
+    "APP_URL",
+    parseFrontendUrl(process.env.FRONTEND_URL) || "http://localhost:6767",
+  ),
   databaseUrl: process.env.DATABASE_URL,
   frontendUrl: parseFrontendUrl(process.env.FRONTEND_URL),
   authMode: resolvedAuthMode,
-  jwtSecret: resolveJwtSecret(resolvedNodeEnv),
+  jwtSecret: runtimeSecrets.values.JWT_SECRET,
   jwtAccessExpiresIn: getOptionalEnv("JWT_ACCESS_EXPIRES_IN", "15m"),
   jwtRefreshExpiresIn: getOptionalEnv("JWT_REFRESH_EXPIRES_IN", "7d"),
   rateLimitMaxRequests: getRequiredEnvNumber("RATE_LIMIT_MAX_REQUESTS", 1000),
   csrfMaxRequests: getRequiredEnvNumber("CSRF_MAX_REQUESTS", 60),
-  csrfSecret: process.env.CSRF_SECRET || null,
-  apiKeySecret: resolveApiKeySecret(resolvedNodeEnv),
+  csrfSecret: runtimeSecrets.values.CSRF_SECRET,
+  apiKeySecret: runtimeSecrets.values.API_KEY_SECRET,
   oidc: resolveOidcConfig(resolvedAuthMode),
   enablePasswordReset: getOptionalBoolean("ENABLE_PASSWORD_RESET", false),
   enableRefreshTokenRotation: getOptionalBoolean(
@@ -475,6 +452,7 @@ export const config: Config = {
   limits: loadRequestLimits(),
   libraries: resolveLibraryConfig(),
   mcp: resolveMcpConfig(),
+  runtimeSecrets: runtimeSecrets.metadata,
 };
 
 if (config.nodeEnv === "production") {

@@ -47,7 +47,7 @@ import {
 import { registerMcpServer } from "./mcp";
 
 const backendRoot = path.resolve(__dirname, "../");
-console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
+console.log("[config] PostgreSQL DATABASE_URL is defined");
 
 const normalizeOrigins = (rawOrigins?: string | null): string[] => {
   const fallback = "http://localhost:6767";
@@ -542,6 +542,8 @@ if (enableOnboardingGate) {
 registerSystemRoutes(app, {
   asyncHandler,
   getBackendVersion,
+  requireAuth,
+  config,
 });
 
 registerApiKeyRoutes(app, {

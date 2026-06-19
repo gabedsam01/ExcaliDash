@@ -1,107 +1,140 @@
 # Quickstart
 
-This quickstart builds ExcaliDash V2 from the repository source. It does not
-assume that Docker images have been published for this fork.
+## Prerequisites
 
-## Requirements
+- Docker Engine
+- Docker Compose plugin (`docker compose version`)
+- `curl`
 
-- Docker and Docker Compose
-- Git
+The GHCR packages must have been published by a successful run of
+`.github/workflows/ghcr.yml`.
 
-## Clone
+## Fast install
 
 ```bash
-git clone YOUR_REPOSITORY_URL excalidash-v2
+mkdir excalidash-v2
 cd excalidash-v2
-cp .env.example .env
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/quickstart.sh | bash
+docker compose up -d
 ```
 
-## Minimal `.env`
+Open:
 
-Replace every `change_me` value before production use.
-
-```env
-FRONTEND_PORT=3000
-POSTGRES_USER=excalidash
-POSTGRES_PASSWORD=change_me
-POSTGRES_DB=excalidash
-DATABASE_URL=postgresql://excalidash:change_me@postgres:5432/excalidash?schema=public&sslmode=disable
-DIRECT_URL=postgresql://excalidash:change_me@postgres:5432/excalidash?schema=public&sslmode=disable
-FRONTEND_URL=http://localhost:3000
-AUTH_MODE=local
-JWT_SECRET=change_me_please_generate_a_long_random_secret
-CSRF_SECRET=change_me_please_generate_a_long_random_secret
-API_KEY_SECRET=change_me_please_generate_a_long_random_secret
-MCP_ENABLED=true
+```txt
+http://localhost:6767
 ```
 
-`DATABASE_URL` is the connection used by the current Prisma runtime.
-`DIRECT_URL` is included for tooling or future managed-database workflows, but
-the current Prisma datasource does not read it.
+To prepare files and start immediately:
 
-## Validate configuration
+```bash
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/quickstart.sh | bash -s -- --yes --up
+```
+
+The script:
+
+- downloads `docker-compose.yml` when missing;
+- creates `.env` when missing;
+- replaces only empty or documented placeholder secret values;
+- generates 512-bit lowercase hexadecimal secrets;
+- never prints complete secret values;
+- leaves existing non-placeholder values unchanged.
+
+## Manual install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/.env.example -o .env
+```
+
+Replace all four `generate_with_quickstart` placeholders with 128-character
+hexadecimal values. To fill only those placeholders automatically:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/quickstart.sh -o quickstart.sh
+sh quickstart.sh --yes
+```
+
+Validate and start:
 
 ```bash
 docker compose config
+docker compose up -d
 ```
 
-## Start
+## Operations
 
-```bash
-docker compose up -d --build
-```
-
-## Open
-
-```txt
-http://localhost:3000
-```
-
-Complete the first-run authentication setup in the browser.
-
-## Health check
-
-```bash
-curl -i http://localhost:3000/api/health
-```
-
-## MCP endpoint
-
-```txt
-http://localhost:3000/mcp
-```
-
-Create a key in **Settings → MCP / API Keys** before connecting an MCP client.
-See [mcp.md](mcp.md).
-
-## Agent Skills
-
-Install the ExcaliDash V2 Agent Skills in the current checkout:
-
-```bash
-npx -y @gabedsam01/excalidash-v2-skills --local
-```
-
-This creates `.claude/skills` and `.agents/skills`. See
-[skills.md](skills.md) for agent selection, verification, and removal.
-
-## Logs
+Status and logs:
 
 ```bash
 docker compose ps
 docker compose logs backend --tail=200
+docker compose logs -f backend
 ```
 
-## Stop
+Stop:
 
 ```bash
 docker compose down
 ```
 
-## Reset local data
-
-This deletes the local PostgreSQL database and other named volumes:
+Update:
 
 ```bash
-docker compose down -v
+docker compose pull
+docker compose up -d
 ```
+
+## Rotate secrets
+
+Generate a new 512-bit value with:
+
+```bash
+openssl rand -hex 64
+```
+
+Replace the relevant value in `.env`, then recreate the services:
+
+```bash
+docker compose up -d --force-recreate backend frontend
+```
+
+Changing `JWT_SECRET` signs users out. Changing `API_KEY_SECRET` invalidates
+existing API keys. To rotate `POSTGRES_PASSWORD`, first change the PostgreSQL
+role password with `psql`, then update `.env` and recreate `postgres` and
+`backend`; changing only `.env` does not alter an existing database role.
+
+```bash
+docker compose up -d --force-recreate postgres backend
+```
+
+## Backups
+
+Database:
+
+```bash
+docker compose exec -T postgres pg_dump \
+  -U excalidash -d excalidash > excalidash.sql
+```
+
+Persistent backend data, including fallback-generated secrets and cached
+libraries:
+
+```bash
+docker run --rm \
+  --volume excalidash-v2_backend_data:/source:ro \
+  --volume "$PWD":/backup \
+  alpine tar -czf /backup/backend_data.tgz -C /source .
+```
+
+Store both files outside the Docker host.
+
+## Runtime configuration status
+
+After authentication, the UI/API session can request:
+
+```txt
+GET http://localhost:6767/api/system/runtime-config
+```
+
+The response contains only status, source labels, limits, and truncated
+SHA-256 fingerprints. It never returns raw credentials or connection strings.

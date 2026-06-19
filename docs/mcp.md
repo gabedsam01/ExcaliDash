@@ -9,7 +9,7 @@ drawing, library, validation, repair, versioning, and export tools.
 For the Docker Compose quickstart, use the frontend proxy:
 
 ```txt
-http://localhost:3000/mcp
+http://localhost:6767/mcp
 ```
 
 For a backend started directly on its default port, use:
@@ -129,5 +129,5 @@ Some clients call this transport `streamable-http` instead of `http`.
 - `401 Unauthorized`: the Bearer token is missing, invalid, or revoked.
 - Empty tools or prompts: confirm `MCP_ENABLED=true` and rebuild the backend.
 - Direct backend connection fails under Compose: use
-  `http://localhost:3000/mcp`; the default Compose file exposes only the
+  `http://localhost:6767/mcp`; the default Compose file exposes only the
   frontend.

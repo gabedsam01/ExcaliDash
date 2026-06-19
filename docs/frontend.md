@@ -1,29 +1,42 @@
 # Frontend
 
-The frontend is a React and Vite application in `frontend/src`. API access is
-centralized in `frontend/src/api/index.ts`. Production Nginx routing is defined
-by `frontend/nginx.conf.template`.
+The frontend is a React/Vite application in `frontend/src`. API access is
+centralized in `frontend/src/api/index.ts`. Production routing is defined by
+`frontend/nginx.conf.template`.
+
+## Production container
+
+The container listens on port `80`. `BACKEND_URL` must use `host:port` format;
+the quickstart sets it to `backend:8000`.
+
+Nginx proxies:
+
+- `/api` to the backend API;
+- `/socket.io` to live collaboration;
+- `/mcp` to the authenticated MCP transport.
+
+The quickstart publishes the frontend at:
+
+```txt
+http://localhost:6767
+```
 
 ## Local development
 
-Start the backend first, then:
+Start the backend, then:
 
 ```bash
 cd frontend
 cp .env.example .env
 npm install
-npm run dev -- --port 5173
+npm run dev
 ```
 
 Open:
 
 ```txt
-http://localhost:5173
+http://localhost:6767
 ```
-
-The Vite proxy sends `/api` and Socket.IO traffic to
-`http://localhost:8000`. The production frontend also proxies `/mcp`; direct
-frontend development should use `http://localhost:8000/mcp` for MCP clients.
 
 ## Tests
 

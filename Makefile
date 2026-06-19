@@ -1,10 +1,11 @@
 .PHONY: help install dev build test test-frontend test-backend test-e2e test-e2e-docker \
         lint lint-frontend lint-backend clean docker-build docker-run docker-down docker-logs \
-        release pre-release version-bump changelog changelog-open changelog-keep db-migrate db-reset
+        docker-prepare release pre-release version-bump changelog changelog-open changelog-keep db-migrate db-reset
 
 DOCKER_USERNAME := zimengxiong
 IMAGE_NAME := excalidash
 VERSION := $(shell cat VERSION 2>/dev/null || echo "0.0.0")
+SOURCE_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.source.yml
 
 .DEFAULT_GOAL := help
 
@@ -164,20 +165,23 @@ test-watch: ## Run tests in watch mode
 		(cd backend && npm run test:watch) & \
 		wait
 
-docker-build: ## Build Docker images locally
+docker-prepare: ## Prepare a secure local .env for Docker commands
+	./quickstart.sh --yes
+
+docker-build: docker-prepare ## Build Docker images locally
 	@echo "Building Docker images..."
-	docker compose build
+	$(SOURCE_COMPOSE) build
 	@echo "Docker images built."
 
-docker-run: ## Start Docker containers (docker-compose up)
+docker-run: docker-prepare ## Start locally built Docker containers
 	@echo "Starting Docker containers..."
-	docker compose up
+	$(SOURCE_COMPOSE) up
 
 docker-up: docker-run ## Alias for docker-run
 
-docker-run-detached: ## Start Docker containers in background
+docker-run-detached: docker-prepare ## Start locally built Docker containers in background
 	@echo "Starting Docker containers (detached)..."
-	docker compose up -d
+	$(SOURCE_COMPOSE) up -d
 	@echo "Containers started. Access at http://localhost:6767"
 
 docker-down: ## Stop and remove Docker containers

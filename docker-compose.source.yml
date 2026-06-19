@@ -1,0 +1,13 @@
+# Contributor override. End users should use docker-compose.yml by itself.
+services:
+  backend:
+    image: excalidash-v2-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+  frontend:
+    image: excalidash-v2-frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile

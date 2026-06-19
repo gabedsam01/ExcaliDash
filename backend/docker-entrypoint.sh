@@ -1,80 +1,13 @@
 #!/bin/sh
 set -e
 
-JWT_SECRET_FILE="/app/prisma/.jwt_secret"
-CSRF_SECRET_FILE="/app/prisma/.csrf_secret"
-API_KEY_SECRET_FILE="/app/prisma/.api_key_secret"
 MIGRATION_LOCK_DIR="/app/prisma/.migration-lock"
 MIGRATION_LOCK_TIMEOUT_SECONDS="${MIGRATION_LOCK_TIMEOUT_SECONDS:-120}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 
-# Ensure JWT secret exists for production startup.
-# Backward compatibility: older installs may not have JWT_SECRET configured.
-if [ -z "${JWT_SECRET:-}" ]; then
-    echo "JWT_SECRET not provided, resolving persisted secret..."
-    if [ -f "${JWT_SECRET_FILE}" ]; then
-        JWT_SECRET="$(tr -d '\r\n' < "${JWT_SECRET_FILE}")"
-    fi
-
-    if [ -z "${JWT_SECRET}" ]; then
-        echo "No persisted JWT secret found. Generating a new secret..."
-        JWT_SECRET="$(openssl rand -hex 32)"
-        umask 077
-        printf "%s" "${JWT_SECRET}" > "${JWT_SECRET_FILE}"
-    fi
-else
-    # Persist explicitly provided secret to support future restarts without env injection.
-    umask 077
-    printf "%s" "${JWT_SECRET}" > "${JWT_SECRET_FILE}"
-fi
-
-export JWT_SECRET
-
-# Ensure CSRF secret exists for stable token validation across restarts.
-# (Still recommend setting explicitly for multi-instance deployments.)
-if [ -z "${CSRF_SECRET:-}" ]; then
-    echo "CSRF_SECRET not provided, resolving persisted secret..."
-    if [ -f "${CSRF_SECRET_FILE}" ]; then
-        CSRF_SECRET="$(tr -d '\r\n' < "${CSRF_SECRET_FILE}")"
-    fi
-
-    if [ -z "${CSRF_SECRET}" ]; then
-        echo "No persisted CSRF secret found. Generating a new secret..."
-        CSRF_SECRET="$(openssl rand -base64 32)"
-        umask 077
-        printf "%s" "${CSRF_SECRET}" > "${CSRF_SECRET_FILE}"
-    fi
-else
-    umask 077
-    printf "%s" "${CSRF_SECRET}" > "${CSRF_SECRET_FILE}"
-fi
-
-export CSRF_SECRET
-
-# Ensure the API key HMAC secret remains stable across restarts.
-if [ -z "${API_KEY_SECRET:-}" ]; then
-    echo "API_KEY_SECRET not provided, resolving persisted secret..."
-    if [ -f "${API_KEY_SECRET_FILE}" ]; then
-        API_KEY_SECRET="$(tr -d '\r\n' < "${API_KEY_SECRET_FILE}")"
-    fi
-
-    if [ -z "${API_KEY_SECRET}" ]; then
-        echo "No persisted API key secret found. Generating a new secret..."
-        API_KEY_SECRET="$(openssl rand -hex 32)"
-        umask 077
-        printf "%s" "${API_KEY_SECRET}" > "${API_KEY_SECRET_FILE}"
-    fi
-else
-    umask 077
-    printf "%s" "${API_KEY_SECRET}" > "${API_KEY_SECRET_FILE}"
-fi
-
-export API_KEY_SECRET
-
 # 1. Ensure schema and migrations are present (Running as root)
-# /app/prisma now only holds the Prisma schema/migrations and the persisted
-# JWT/CSRF/API key secrets (no database file lives here). Copy individual files rather
-# than the whole prisma directory so the persisted secrets are never clobbered.
+# /app/prisma holds the Prisma schema, migrations, and migration lock. Runtime
+# secrets are managed by the application in /app/data/secrets.env.
 if [ ! -f "/app/prisma/schema.prisma" ]; then
     echo "Mount appears empty (missing schema.prisma). Bootstrapping schema and migrations..."
 else
@@ -83,20 +16,17 @@ else
 fi
 
 mkdir -p /app/prisma/migrations
+mkdir -p /app/data
 cp /app/prisma_template/schema.prisma /app/prisma/schema.prisma
 cp -R /app/prisma_template/migrations/. /app/prisma/migrations/
 
 # 2. Fix permissions unconditionally (Running as root)
 echo "Fixing filesystem permissions..."
-mkdir -p /app/data
 chown -R nodejs:nodejs /app/uploads
 chown -R nodejs:nodejs /app/prisma
 chown -R nodejs:nodejs /app/data
 chmod 755 /app/uploads
 chmod 755 /app/data
-chmod 600 "${JWT_SECRET_FILE}"
-chmod 600 "${CSRF_SECRET_FILE}"
-chmod 600 "${API_KEY_SECRET_FILE}"
 
 # 3. Run Migrations (Drop privileges to nodejs)
 # Multi-replica note:

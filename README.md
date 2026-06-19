@@ -1,83 +1,91 @@
 # ExcaliDash V2
 
-A self-hosted dashboard and organizer for Excalidraw with multi-user
-collaboration, scoped sharing, PostgreSQL storage, API keys, MCP tools, curated
-libraries, and AI-agent workflows.
+ExcaliDash V2 is a self-hosted dashboard and organizer for Excalidraw drawings.
+It provides collections, search, import/export, live collaboration, local or
+OIDC authentication, API keys, curated libraries, and an MCP server for
+AI-agent workflows.
 
 ## Credits
 
-ExcaliDash V2 is based on the original ExcaliDash project by ZimengXiong. This
-repository keeps attribution to the original project and extends it with
-PostgreSQL-only storage, MCP tooling, API keys, curated Excalidraw libraries,
-and deployment improvements.
+ExcaliDash V2 is an evolved fork of the original
+[ExcaliDash](https://github.com/ZimengXiong/ExcaliDash) project by
+ZimengXiong. This repository preserves the upstream attribution and license
+while extending the project with PostgreSQL-only runtime storage, MCP tooling,
+API keys, curated libraries, and deployment improvements.
 
-## What changed in V2
+## Database
 
-- PostgreSQL is now required for runtime storage.
-- SQLite runtime storage was removed.
-- Legacy SQLite installations should be backed up and migrated before
-  production use.
-- API keys are available for MCP clients.
-- The MCP endpoint is available at `/mcp`.
-- Codex and Claude Code setup snippets are available in Settings.
-- Curated Excalidraw libraries and MCP quality/repair tooling were added.
+PostgreSQL is required at runtime. SQLite was removed from the runtime and is
+mentioned only for legacy migration context. PostgreSQL provides reliable
+production persistence, consistent migrations, concurrent access, and
+predictable deployments.
 
-ExcaliDash V2 uses PostgreSQL as the required runtime database. Earlier
-installations based on SQLite should be migrated before upgrading. PostgreSQL
-was adopted to support larger deployments, multi-user usage, API keys, indexed
-queries, MCP workflows, and production backup/restore practices.
+## Fast install with GHCR
 
-## Features
+The GHCR workflow in this repository publishes the required images after it
+runs successfully on `main` or a `v*` tag. Once the packages are available:
 
-- Organize Excalidraw drawings into collections.
-- Search, import, export, version, and restore drawings.
-- Collaborate in real time and share drawings with scoped permissions.
-- Use local authentication or optional OIDC.
-- Connect Codex, Claude Code, and other MCP clients with revocable API keys.
-- Generate, validate, repair, and export diagrams through MCP tools.
-- Search and use curated Excalidraw libraries.
+```bash
+mkdir excalidash-v2
+cd excalidash-v2
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/quickstart.sh | bash
+docker compose up -d
+```
 
-## Quickstart
+Open:
 
-See [docs/quickstart.md](docs/quickstart.md) for the source-build Docker Compose
-setup. The documented local frontend is `http://localhost:3000`, and the MCP
-endpoint is `http://localhost:3000/mcp`.
+```txt
+http://localhost:6767
+```
+
+The quickstart creates `.env`, generates 512-bit database/JWT/CSRF/API-key
+secrets, and downloads the single user-facing `docker-compose.yml`. It does not
+start containers unless invoked with `--up`.
+
+Manual installation:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/gabedsam01/excalidash-v2/main/.env.example -o .env
+# Replace every generate_with_quickstart value before starting.
+docker compose up -d
+```
+
+## MCP and API keys
+
+Create a revocable API key in **Settings → MCP / API Keys**. The Compose MCP
+endpoint is:
+
+```txt
+http://localhost:6767/mcp
+```
+
+Install the optional ExcaliDash V2 Agent Skills:
+
+```bash
+npx -y @gabedsam01/excalidash-v2-skills@latest --local --yes
+```
 
 ## Documentation
 
 - [Quickstart](docs/quickstart.md)
+- [Deployment](docs/deployment.md)
+- [GHCR images](docs/ghcr.md)
 - [PostgreSQL](docs/postgres.md)
 - [Backend](docs/backend.md)
 - [Frontend](docs/frontend.md)
 - [MCP](docs/mcp.md)
-- [Deployment](docs/deployment.md)
 - [Agent Skills](docs/skills.md)
 
-## Agent Skills
+## Security
 
-Install ExcaliDash V2 skills for Claude Code and universal agents:
-
-```bash
-npx -y @gabedsam01/excalidash-v2-skills --local
-```
-
-For global user installation:
-
-```bash
-npx -y @gabedsam01/excalidash-v2-skills --user
-```
-
-See [docs/skills.md](docs/skills.md).
-
-## Security notes
-
-- Replace all placeholder secrets before production use.
-- Never commit API keys, database credentials, JWT secrets, or CSRF secrets.
-- An API key is shown in full only when it is created; stored keys remain
-  masked.
-- Back up PostgreSQL and the persisted secrets volume before upgrades.
+- Keep `.env` private and never commit generated credentials.
+- The authenticated runtime-config endpoint returns only defined/source status
+  and truncated SHA-256 fingerprints, never raw secrets or database URLs.
+- Back up PostgreSQL and the `backend_data` volume before upgrades.
+- Pin version or SHA image tags for reproducible production deployments.
 
 ## License
 
-ExcaliDash V2 is distributed under AGPL-3.0 and preserves upstream attribution.
-See [LICENSE](LICENSE).
+ExcaliDash V2 is distributed under AGPL-3.0 and preserves upstream
+attribution. See [LICENSE](LICENSE).

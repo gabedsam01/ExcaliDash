@@ -14,7 +14,7 @@ ZimengXiong.
 Agent Skills and MCP prompts are separate:
 
 - MCP prompts and tools are discovered by an MCP client after it connects to
-  the ExcaliDash endpoint, such as `http://localhost:3000/mcp`.
+  the ExcaliDash endpoint, such as `http://localhost:6767/mcp`.
 - Agent Skills are local directories that contain instructions and supporting
   files. They must be installed into an agent skills directory.
 
@@ -51,7 +51,7 @@ is not itself a skill and is not included in `--list`.
 Install in the current project:
 
 ```bash
-npx -y @gabedsam01/excalidash-v2-skills --local
+npx -y @gabedsam01/excalidash-v2-skills@latest --local --yes
 ```
 
 Install for the current user:
@@ -188,4 +188,4 @@ npx -y @gabedsam01/excalidash-v2-skills --list --json
 write permissions, available skills, installed skills, and detected problems.
 
 Use placeholder credentials such as `YOUR_API_TOKEN` in examples and keep
-local MCP testing on `http://localhost:3000/mcp`.
+local MCP testing on `http://localhost:6767/mcp`.
