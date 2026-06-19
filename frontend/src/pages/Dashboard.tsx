@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layout } from '../components/Layout';
 import { DrawingCard } from '../components/DrawingCard';
 import { Plus, Search, Loader2, Inbox, Trash2, Folder, ArrowRight, Copy, Upload, CheckSquare, Square, ArrowUp, ArrowDown, ChevronDown, FileText, Calendar, Clock } from 'lucide-react';
@@ -15,6 +16,7 @@ import { useDashboardData } from './dashboard/useDashboardData';
 const PAGE_SIZE = 24;
 
 export const Dashboard: React.FC = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -515,13 +517,13 @@ export const Dashboard: React.FC = () => {
   };
 
   const viewTitle = React.useMemo(() => {
-    if (selectedCollectionId === undefined) return "All Drawings";
-    if (selectedCollectionId === null) return "Unorganized";
-    if (selectedCollectionId === 'shared') return "Shared with me";
-    if (selectedCollectionId === 'trash') return "Trash";
+    if (selectedCollectionId === undefined) return t('dashboard.views.allDrawings');
+    if (selectedCollectionId === null) return t('collections.unorganized');
+    if (selectedCollectionId === 'shared') return t('dashboard.views.sharedWithMe');
+    if (selectedCollectionId === 'trash') return t('collections.trash');
     const collection = collections.find(c => c.id === selectedCollectionId);
-    return collection ? collection.name : "Collection";
-  }, [selectedCollectionId, collections]);
+    return collection ? collection.name : t('collections.collection');
+  }, [selectedCollectionId, collections, t]);
 
   const hasSelection = selectedIds.size > 0;
   const allSelected = sortedDrawings.length > 0 && selectedIds.size === sortedDrawings.length;
@@ -694,7 +696,7 @@ export const Dashboard: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search drawings..."
+              placeholder={t('dashboard.search.placeholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-12 py-2.5 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-xl focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] placeholder:text-slate-400 dark:placeholder:text-neutral-500 text-sm text-slate-900 dark:text-white"
@@ -897,7 +899,7 @@ export const Dashboard: React.FC = () => {
             )}
           >
             <Plus size={18} strokeWidth={2.5} />
-            New Drawing
+            {t('dashboard.actions.newDrawing')}
           </button>
         </div>
       </div>
@@ -953,11 +955,11 @@ export const Dashboard: React.FC = () => {
                   {isTrashView ? <Trash2 size={32} className="text-slate-300 dark:text-slate-600" /> : <Inbox size={32} className="text-slate-300 dark:text-slate-600" />}
                 </div>
                 <p className="text-lg font-semibold text-slate-600 dark:text-slate-400">
-                  {isTrashView ? "Your trash is empty" : "No drawings found"}
+                  {isTrashView ? t('dashboard.empty.trashEmpty') : t('dashboard.empty.noDrawings')}
                 </p>
                 {!isTrashView && (
                   <p className="text-sm mt-2 text-slate-400 dark:text-neutral-500 max-w-xs text-center">
-                    {search ? `No results for "${search}"` : "Create a new drawing to get started!"}
+                    {search ? t('dashboard.empty.noSearchResults', { search }) : t('dashboard.empty.createDrawingHint')}
                   </p>
                 )}
                 {search && (

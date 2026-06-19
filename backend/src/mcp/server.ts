@@ -12,7 +12,9 @@ import { redactDrawingData } from "./security/redaction";
 import { createLibraryServices } from "../libraries";
 import type { LibraryConfig, LibraryPrisma } from "../libraries/types";
 import type { McpConfig } from "./types";
+import type { SnapshotConfig } from "../config";
 import { createDrawingService } from "./drawings/drawingService";
+import { getCache } from "../cache/cacheService";
 import { createLibraryAdapter } from "./libraries/libraryAdapter";
 import { buildToolRegistry, type ToolContext } from "./registry/toolRegistry";
 import { buildPromptRegistry } from "./prompts/registry";
@@ -32,6 +34,7 @@ export interface RegisterMcpDeps {
     libraries: LibraryConfig;
     frontendUrl?: string;
     apiKeySecret: string;
+    snapshots: SnapshotConfig;
   };
   isAllowedOrigin: (origin?: string) => boolean;
   serverVersion: string;
@@ -66,6 +69,15 @@ export const registerMcpServer = (
     prisma,
     frontendBaseUrl: pickFrontendBaseUrl(config.frontendUrl),
     maxElements: mcp.maxElements,
+    retention: {
+      maxPerDrawing: config.snapshots.maxPerDrawing,
+      pruneOnSave: config.snapshots.pruneOnSave,
+    },
+    onDrawingChanged: ({ userId, drawingId }) => {
+      // Keep the REST hot-drawing + listing caches consistent after MCP writes.
+      void getCache().invalidateDrawing(drawingId);
+      void getCache().invalidateUserListings(userId);
+    },
     sanitizeScene: (data) =>
       sanitizeDrawingData(
         redactDrawingData(

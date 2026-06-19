@@ -1,15 +1,17 @@
 # Deployment
 
-The user-facing deployment is a single `docker-compose.yml` with three
-separate containers:
+The user-facing deployment is a single `docker-compose.yml` with separate
+containers:
 
 - PostgreSQL 17
+- Redis 7 (optional speed layer; enabled by default in the quickstart)
 - ExcaliDash V2 backend
 - ExcaliDash V2 frontend/Nginx
 
-PostgreSQL is not bundled into either application image. The topology remains
-suitable for advanced deployments where database, backend, and frontend are
-managed independently.
+PostgreSQL is not bundled into either application image, and remains the source
+of truth. Redis is only a cache and can be disabled with `REDIS_ENABLED=false`.
+The topology remains suitable for advanced deployments where database, cache,
+backend, and frontend are managed independently.
 
 ## Default deployment
 
@@ -33,8 +35,19 @@ Only the frontend port is published. Nginx proxies `/api`, `/socket.io`, and
   ingress.
 - Back up PostgreSQL and `backend_data`.
 - Keep one backend replica unless collaboration state is moved to a shared
-  Socket.IO adapter.
+  Socket.IO adapter. When running multiple replicas, enable Redis
+  (`REDIS_ENABLED=true`) so the listing cache and the advisory save lock /
+  snapshot coalescing are shared across replicas. PostgreSQL stays the source of
+  truth and the app degrades gracefully if Redis is unavailable. See
+  [redis.md](redis.md).
+- Persist the `redis_data` volume if you want the Redis append-only file to
+  survive restarts (cache contents are non-authoritative either way).
 - Run database migrations once when operating multiple backend replicas.
+- ExcaliDash keeps only the latest `MAX_SNAPSHOTS_PER_DRAWING` (default 15)
+  snapshots per drawing to bound `DrawingSnapshot` growth. To reclaim space on
+  an existing large table, run `node scripts/prune-snapshots.cjs --keep 15
+  --confirm` then `VACUUM (FULL, ANALYZE) "DrawingSnapshot";`. See
+  [postgres.md](postgres.md).
 
 ## Health and logs
 

@@ -19,11 +19,28 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - excalidash
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   backend:
     image: ghcr.io/gabedsam01/excalidash-v2:${EXCALIDASH_BACKEND_TAG:-backend-latest}
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -53,6 +70,10 @@ services:
       RUNTIME_DATA_DIR: /app/data
       LIBRARY_PUBLIC_SEARCH_ENABLED: ${LIBRARY_PUBLIC_SEARCH_ENABLED:-true}
       LIBRARY_AUTO_REFRESH_ON_START: ${LIBRARY_AUTO_REFRESH_ON_START:-true}
+      # Optional Redis speed layer (recommended). PostgreSQL stays the source of
+      # truth; if Redis is unavailable the backend transparently uses PostgreSQL.
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     volumes:
       - backend_data:/app/data
     networks:
@@ -96,3 +117,4 @@ networks:
 volumes:
   postgres_data:
   backend_data:
+  redis_data:

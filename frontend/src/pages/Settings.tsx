@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layout } from '../components/Layout';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../api';
 import type { Collection } from '../types';
-import { Upload, Moon, Sun, Info, Archive, RefreshCw, Check, Zap, ZapOff } from 'lucide-react';
+import { Upload, Moon, Sun, Info, Archive, RefreshCw, Check, Zap, ZapOff, Languages } from 'lucide-react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { importLegacyFiles } from '../utils/importUtils';
 import { useTheme } from '../context/ThemeContext';
@@ -13,6 +15,7 @@ import { ApiKeysCard } from './settings/ApiKeysCard';
 import { LibrariesCard } from './settings/LibrariesCard';
 
 export const Settings: React.FC = () => {
+    const { t } = useTranslation();
     const [collections, setCollections] = useState<Collection[]>([]);
     const navigate = useNavigate();
     const { theme, toggleTheme } = useTheme();
@@ -243,7 +246,7 @@ export const Settings: React.FC = () => {
             onDeleteCollection={handleDeleteCollection}
         >
             <h1 className="text-3xl sm:text-4xl lg:text-5xl mb-6 lg:mb-8 text-slate-900 dark:text-white pl-1" style={{ fontFamily: 'Excalifont' }}>
-                Settings
+                {t('settings.title')}
             </h1>
 
             {authToggleError && (
@@ -257,6 +260,22 @@ export const Settings: React.FC = () => {
             <LibrariesCard />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="flex flex-col items-center justify-center gap-3 sm:gap-4 p-4 sm:p-6 lg:p-8 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-50 dark:bg-neutral-800 rounded-2xl flex items-center justify-center border-2 border-indigo-100 dark:border-neutral-700">
+                        <Languages size={32} className="text-indigo-600 dark:text-indigo-400 hidden sm:block" />
+                        <Languages size={24} className="text-indigo-600 dark:text-indigo-400 sm:hidden" />
+                    </div>
+                    <div className="text-center">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{t('settings.language.title')}</h3>
+                        <p className="text-xs text-slate-500 dark:text-neutral-400 font-medium max-w-[200px] mx-auto">
+                            {t('settings.language.description')}
+                        </p>
+                    </div>
+                    <div className="w-full flex justify-center pt-2">
+                        <LanguageSwitcher />
+                    </div>
+                </div>
+
                 <div className="flex flex-col items-center justify-center gap-3 sm:gap-4 p-4 sm:p-6 lg:p-8 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]">
                     <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-50 dark:bg-neutral-800 rounded-2xl flex items-center justify-center border-2 border-indigo-100 dark:border-neutral-700">
                         <Archive size={32} className="text-indigo-600 dark:text-indigo-400 hidden sm:block" />

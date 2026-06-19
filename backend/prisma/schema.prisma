@@ -93,6 +93,9 @@ model DrawingSnapshot {
 
   @@index([drawingId, createdAt])
   @@index([createdAt])
+  // Matches snapshot retention ordering (version DESC, createdAt DESC) so the
+  // "keep newest N per drawing" prune only scans the surplus rows.
+  @@index([drawingId, version(sort: Desc), createdAt(sort: Desc)])
 }
 
 model DrawingPermission {

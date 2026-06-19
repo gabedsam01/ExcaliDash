@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -19,6 +20,12 @@ import type { UserIdentity } from '../utils/identity';
 import { useAuth } from '../context/AuthContext';
 import { exportFromEditor } from '../utils/exportUtils';
 import { compressDroppedImagePayload, compressExcalidrawFiles } from '../utils/imageCompression';
+import {
+  getAutosaveDebounceMs,
+  getAutosaveMaxWaitMs,
+  saveStatusLabel,
+  type SaveStatus,
+} from '../utils/autosaveConfig';
 import * as api from '../api';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -208,6 +215,10 @@ export const Editor: React.FC = () => {
   const [isSceneLoading, setIsSceneLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingOnLeave, setIsSavingOnLeave] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const { t } = useTranslation();
+  const setSaveStatusRef = useRef(setSaveStatus);
+  setSaveStatusRef.current = setSaveStatus;
   const [autoHideEnabled, setAutoHideEnabled] = useState(getStoredAutoHideEnabled);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [langCode, setLangCode] = useState(getInitialLangCode);
@@ -994,6 +1005,7 @@ export const Editor: React.FC = () => {
                 drawingId,
                 currentVersion: reportedVersion,
               });
+              setSaveStatusRef.current('retrying');
               await persistScene(1);
               return;
             }
@@ -1031,15 +1043,24 @@ export const Editor: React.FC = () => {
         .catch(() => undefined)
         .then(async () => {
           if (!saveDataRef.current) return;
+          setSaveStatusRef.current('saving');
           if (suppressErrors) {
             try {
               await saveDataRef.current(drawingId, elements, appState, files);
+              setSaveStatusRef.current('saved');
             } catch {
-              // Autosave is best-effort; the UI handles surfacing explicit save failures elsewhere.
+              // Autosave is best-effort; surface a non-blocking "Save failed" status.
+              setSaveStatusRef.current('error');
             }
             return;
           }
-          await saveDataRef.current(drawingId, elements, appState, files);
+          try {
+            await saveDataRef.current(drawingId, elements, appState, files);
+            setSaveStatusRef.current('saved');
+          } catch (err) {
+            setSaveStatusRef.current('error');
+            throw err;
+          }
         });
       return saveQueueRef.current;
     },
@@ -1123,9 +1144,15 @@ export const Editor: React.FC = () => {
 
 
   const debouncedSave = useCallback(
-    debounce((drawingId, elements, appState, files) => {
-      enqueueSceneSave(drawingId, elements, appState, files);
-    }, 1000),
+    debounce(
+      (drawingId, elements, appState, files) => {
+        enqueueSceneSave(drawingId, elements, appState, files);
+      },
+      // Group rapid edits (VITE_AUTOSAVE_DEBOUNCE_MS) but guarantee a save at
+      // least every VITE_AUTOSAVE_MAX_WAIT_MS during continuous editing.
+      getAutosaveDebounceMs(),
+      { maxWait: getAutosaveMaxWaitMs() },
+    ),
     [enqueueSceneSave]
   );
   debouncedSaveRef.current = debouncedSave;
@@ -1761,16 +1788,33 @@ export const Editor: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {canEdit && saveStatus !== 'idle' ? (
+            <span
+              role="status"
+              aria-live="polite"
+              data-testid="save-status"
+              className={clsx(
+                'text-xs font-medium px-2 py-1 rounded-full transition-colors',
+                saveStatus === 'error'
+                  ? 'text-red-700 dark:text-red-300'
+                  : saveStatus === 'saving' || saveStatus === 'retrying'
+                    ? 'text-gray-500 dark:text-gray-400'
+                    : 'text-green-700 dark:text-green-400',
+              )}
+            >
+              {saveStatusLabel(saveStatus, t)}
+            </span>
+          ) : null}
           {!canEdit ? (
             <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-              Read-only
+              {t('editor.chrome.readOnly')}
             </span>
           ) : null}
           {canEdit && id ? (
             <button
               onClick={() => setIsHistoryOpen(true)}
               className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
-              title="Version History"
+              title={t('editor.buttons.versionHistory')}
             >
               <History size={20} />
             </button>
@@ -1779,7 +1823,7 @@ export const Editor: React.FC = () => {
             <button
               onClick={() => setIsShareOpen(true)}
               className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
-              title="Share"
+              title={t('editor.buttons.share')}
             >
               <Share2 size={20} />
             </button>
@@ -1793,11 +1837,12 @@ export const Editor: React.FC = () => {
                 try {
                   window.localStorage.setItem(autoHideStorageKey, next ? "1" : "0");
                 } catch {
+                  // Ignore storage failures (e.g. private mode / quota).
                 }
               }
             }}
             className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
-            title={autoHideEnabled ? "Disable auto-hide" : "Enable auto-hide"}
+            title={autoHideEnabled ? t('editor.buttons.disableAutoHide') : t('editor.buttons.enableAutoHide')}
           >
             {autoHideEnabled ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
           </button>
@@ -1815,7 +1860,7 @@ export const Editor: React.FC = () => {
               }
             }}
             className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
-            title="Export drawing"
+            title={t('editor.buttons.exportDrawing')}
           >
             <Download size={20} />
           </button>

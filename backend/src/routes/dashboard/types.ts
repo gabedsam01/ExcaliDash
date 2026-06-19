@@ -1,6 +1,11 @@
 import express from "express";
 import { z } from "zod";
 import { Prisma, PrismaClient } from "../../generated/client";
+import type {
+  SnapshotConfig,
+  ImageOptimizationConfig,
+  SavePerfConfig,
+} from "../../config";
 
 export type SortField = "name" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";
@@ -51,6 +56,9 @@ export type DashboardRouteDeps = {
   config: {
     nodeEnv: string;
     enableAuditLogging: boolean;
+    snapshots: SnapshotConfig;
+    imageOptimization: ImageOptimizationConfig;
+    savePerf: SavePerfConfig;
   };
   logAuditEvent: LogAuditEvent;
 };

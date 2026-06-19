@@ -41,10 +41,91 @@ export interface Config {
   limits: RequestLimits;
   libraries: LibraryConfig;
   mcp: McpConfig;
+  snapshots: SnapshotConfig;
+  imageOptimization: ImageOptimizationConfig;
+  savePerf: SavePerfConfig;
+  redis: RedisConfig;
+  localFileStorage: LocalFileStorageConfig;
   runtimeSecrets: Record<RuntimeSecretKey, RuntimeSecretMetadata>;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced";
+
+/**
+ * Snapshot retention + "smart snapshot" policy. Keeps DrawingSnapshot growth
+ * bounded (a large Excalidraw file can otherwise accumulate thousands of
+ * multi-MB snapshots). See docs/postgres.md.
+ */
+export interface SnapshotConfig {
+  /** Max snapshots kept per drawing. <= 0 disables automatic retention. */
+  maxPerDrawing: number;
+  /** Prune old snapshots right after creating a new one. */
+  pruneOnSave: boolean;
+  /** Run a one-shot count-based prune across all drawings at startup. */
+  pruneOnStartup: boolean;
+  /** Minimum seconds between snapshots for the same drawing. <= 0 = no gating. */
+  minIntervalSeconds: number;
+  /** Snapshot on every scene save (defeats interval gating; off by default). */
+  onEverySave: boolean;
+  /** Force a snapshot on explicit version/checkpoint events (manual save/restore). */
+  forceOnVersionChange: boolean;
+  /** Respond to the save before the snapshot write/prune finishes. */
+  async: boolean;
+}
+
+/** Server-side raster image optimization for embedded Excalidraw files. */
+export interface ImageOptimizationConfig {
+  enabled: boolean;
+  maxWidth: number;
+  maxHeight: number;
+  webpQuality: number;
+  jpegQuality: number;
+  pngCompressionLevel: number;
+  /** Files smaller than this many bytes are left untouched. */
+  minBytes: number;
+  /** Reuse optimization results for identical content (in-process hash cache). */
+  cacheEnabled: boolean;
+}
+
+/** Structured per-stage logging for slow saves (no payload content is logged). */
+export interface SavePerfConfig {
+  enabled: boolean;
+  slowMs: number;
+}
+
+/**
+ * Optional Redis speed layer. PostgreSQL is always the source of truth; Redis
+ * only caches hot drawings/metadata and coordinates saves. When disabled (the
+ * default) or unreachable, the app runs on PostgreSQL alone. See docs/redis.md.
+ */
+export interface RedisConfig {
+  enabled: boolean;
+  url: string;
+  prefix: string;
+  /** Default TTL for generic cached values. */
+  cacheTtlSeconds: number;
+  /** TTL for the hot per-drawing cache. */
+  drawingCacheTtlSeconds: number;
+  /** TTL for cached listing/metadata responses. */
+  metadataCacheTtlSeconds: number;
+  /** TTL of the advisory per-drawing save lock (short, self-healing). */
+  saveLockTtlSeconds: number;
+  /** Enable advisory save lock + cross-replica snapshot coalescing. */
+  saveQueueEnabled: boolean;
+  /** Values larger than this are never written to Redis. */
+  maxValueBytes: number;
+}
+
+/**
+ * Optional local (on-volume) file storage for offloading large embedded images
+ * out of the JSON payload. NO object storage (S3/R2/MinIO) is ever used —
+ * ExcaliDash stays self-hosted. Disabled by default; see docs/redis.md and the
+ * "next steps" note in docs/backend.md.
+ */
+export interface LocalFileStorageConfig {
+  enabled: boolean;
+  dir: string;
+}
 
 interface OidcConfig {
   enabled: boolean;
@@ -205,6 +286,36 @@ const getRequiredEnvNumber = (key: string, defaultValue: number): number => {
     );
   }
   return parsed;
+};
+
+/**
+ * Integer env reader that ACCEPTS zero/negative values (used by settings where
+ * `<= 0` is a meaningful "disabled" sentinel, e.g. MAX_SNAPSHOTS_PER_DRAWING).
+ * Falls back to `defaultValue` when unset or non-numeric.
+ */
+const getOptionalIntAllowingZero = (
+  key: string,
+  defaultValue: number,
+): number => {
+  const value = process.env[key];
+  if (value === undefined || value.trim().length === 0) return defaultValue;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  return Math.trunc(parsed);
+};
+
+/** Clamp an env number into [min, max], falling back to `defaultValue`. */
+const getClampedEnvNumber = (
+  key: string,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  const value = process.env[key];
+  if (value === undefined || value.trim().length === 0) return defaultValue;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
 };
 
 const parseAuthMode = (rawValue: string | undefined): AuthMode => {
@@ -412,6 +523,74 @@ const resolveMcpConfig = (): McpConfig => {
   };
 };
 
+/**
+ * Snapshot retention + smart-snapshot policy. Defaults keep at most 15
+ * snapshots/drawing and avoid writing a heavy snapshot on every autosave.
+ */
+const resolveSnapshotConfig = (): SnapshotConfig => ({
+  maxPerDrawing: getOptionalIntAllowingZero("MAX_SNAPSHOTS_PER_DRAWING", 15),
+  pruneOnSave: getOptionalBoolean("SNAPSHOT_PRUNE_ON_SAVE", true),
+  pruneOnStartup: getOptionalBoolean("SNAPSHOT_PRUNE_ON_STARTUP", false),
+  minIntervalSeconds: getOptionalIntAllowingZero(
+    "SNAPSHOT_MIN_INTERVAL_SECONDS",
+    300,
+  ),
+  onEverySave: getOptionalBoolean("SNAPSHOT_ON_EVERY_SAVE", false),
+  forceOnVersionChange: getOptionalBoolean(
+    "SNAPSHOT_FORCE_ON_VERSION_CHANGE",
+    true,
+  ),
+  async: getOptionalBoolean("SNAPSHOT_ASYNC", true),
+});
+
+const resolveImageOptimizationConfig = (): ImageOptimizationConfig => ({
+  enabled: getOptionalBoolean("IMAGE_OPTIMIZATION_ENABLED", true),
+  maxWidth: getRequiredEnvNumber("IMAGE_OPTIMIZATION_MAX_WIDTH", 1920),
+  maxHeight: getRequiredEnvNumber("IMAGE_OPTIMIZATION_MAX_HEIGHT", 1920),
+  webpQuality: getClampedEnvNumber("IMAGE_OPTIMIZATION_WEBP_QUALITY", 82, 1, 100),
+  jpegQuality: getClampedEnvNumber("IMAGE_OPTIMIZATION_JPEG_QUALITY", 82, 1, 100),
+  pngCompressionLevel: getClampedEnvNumber(
+    "IMAGE_OPTIMIZATION_PNG_COMPRESSION_LEVEL",
+    9,
+    0,
+    9,
+  ),
+  minBytes: getOptionalIntAllowingZero("IMAGE_OPTIMIZATION_MIN_BYTES", 200_000),
+  cacheEnabled: getOptionalBoolean("IMAGE_OPTIMIZATION_CACHE_ENABLED", true),
+});
+
+const resolveSavePerfConfig = (): SavePerfConfig => ({
+  enabled: getOptionalBoolean("SAVE_PERF_LOG_ENABLED", true),
+  slowMs: getRequiredEnvNumber("SAVE_PERF_SLOW_MS", 1000),
+});
+
+/**
+ * Optional Redis layer. Default OFF so existing PostgreSQL-only deployments are
+ * unaffected; the docker-compose quickstart opts in via REDIS_ENABLED=true.
+ */
+const resolveRedisConfig = (): RedisConfig => ({
+  enabled: getOptionalBoolean("REDIS_ENABLED", false),
+  url: getOptionalEnv("REDIS_URL", "redis://redis:6379"),
+  prefix: getOptionalEnv("REDIS_PREFIX", "excalidash:"),
+  cacheTtlSeconds: getRequiredEnvNumber("REDIS_CACHE_TTL_SECONDS", 300),
+  drawingCacheTtlSeconds: getRequiredEnvNumber(
+    "REDIS_DRAWING_CACHE_TTL_SECONDS",
+    600,
+  ),
+  metadataCacheTtlSeconds: getRequiredEnvNumber(
+    "REDIS_METADATA_CACHE_TTL_SECONDS",
+    300,
+  ),
+  saveLockTtlSeconds: getRequiredEnvNumber("REDIS_SAVE_LOCK_TTL_SECONDS", 30),
+  saveQueueEnabled: getOptionalBoolean("REDIS_SAVE_QUEUE_ENABLED", true),
+  maxValueBytes: getRequiredEnvNumber("REDIS_MAX_VALUE_BYTES", 10 * 1024 * 1024),
+});
+
+const resolveLocalFileStorageConfig = (): LocalFileStorageConfig => ({
+  enabled: getOptionalBoolean("LOCAL_FILE_STORAGE_ENABLED", false),
+  dir: getOptionalEnv("LOCAL_FILE_STORAGE_DIR", "/app/data/files"),
+});
+
 const resolvedNodeEnv = getOptionalEnv("NODE_ENV", "development");
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 const runtimeSecrets = resolveRuntimeSecrets({ nodeEnv: resolvedNodeEnv });
@@ -452,6 +631,11 @@ export const config: Config = {
   limits: loadRequestLimits(),
   libraries: resolveLibraryConfig(),
   mcp: resolveMcpConfig(),
+  snapshots: resolveSnapshotConfig(),
+  imageOptimization: resolveImageOptimizationConfig(),
+  savePerf: resolveSavePerfConfig(),
+  redis: resolveRedisConfig(),
+  localFileStorage: resolveLocalFileStorageConfig(),
   runtimeSecrets: runtimeSecrets.metadata,
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Sidebar } from './Sidebar';
@@ -31,6 +32,7 @@ export const Layout: React.FC<LayoutProps> = ({
   onDrop
 }) => {
   const location = useLocation();
+  const { t } = useTranslation();
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -114,8 +116,8 @@ export const Layout: React.FC<LayoutProps> = ({
                 type="button"
                 onClick={() => setIsSidebarOpen(v => !v)}
                 className="inline-flex items-center justify-center h-11 w-11 rounded-xl border-2 border-black dark:border-neutral-700 bg-white/90 dark:bg-neutral-900/90 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] text-slate-900 dark:text-neutral-200 hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none"
-                title={isSidebarOpen ? 'Close menu' : 'Open menu'}
-                aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
+                title={isSidebarOpen ? t('layout.closeMenu') : t('layout.openMenu')}
+                aria-label={isSidebarOpen ? t('layout.closeMenu') : t('layout.openMenu')}
               >
                 {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
@@ -165,7 +167,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <div
               className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? 'bg-indigo-500 dark:bg-indigo-400 w-2' : ''} group`}
               onMouseDown={handleMouseDown}
-              title="Drag to resize sidebar"
+              title={t('layout.dragToResizeSidebar')}
             >
               <div className="absolute inset-y-0 -left-0.5 -right-0.5 bg-transparent hover:bg-indigo-500/10 dark:hover:bg-indigo-400/10 transition-colors duration-150" />
             </div>
@@ -191,7 +193,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <div
               className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-indigo-400 dark:hover:bg-indigo-500 transition-all duration-150 ${isResizing ? 'bg-indigo-500 dark:bg-indigo-400 w-2' : ''} group`}
               onMouseDown={handleMouseDown}
-              title="Drag to resize sidebar"
+              title={t('layout.dragToResizeSidebar')}
             >
               <div className="absolute inset-y-0 -left-0.5 -right-0.5 bg-transparent hover:bg-indigo-500/10 dark:hover:bg-indigo-400/10 transition-colors duration-150" />
             </div>

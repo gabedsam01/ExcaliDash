@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import * as api from '../api';
 import { USER_KEY } from '../utils/impersonation';
 import { getPasswordPolicy, validatePassword } from '../utils/passwordPolicy';
@@ -9,6 +11,7 @@ import { PasswordRequirements } from '../components/PasswordRequirements';
 import { AuthStatusErrorPanel } from '../components/AuthStatusErrorPanel';
 
 export const Login: React.FC = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -149,38 +152,41 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher hideIcon />
+      </div>
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <Logo className="mx-auto h-12 w-auto" />
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900 dark:text-white">
             {mustReset
-              ? 'Reset your password'
+              ? t('auth.reset.title')
               : oidcEnforced
-                ? `Sign in with ${oidcProvider || 'OIDC'}`
-                : 'Sign in to your account'}
+                ? t('auth.login.oidcTitle', { oidcProvider: oidcProvider || 'OIDC' })
+                : t('auth.login.title')}
           </h2>
           {!mustReset && !oidcEnforced && registrationEnabled ? (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Or{' '}
+              {t('common.or')}{' '}
               <Link
                 to="/register"
                 className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
               >
-                create a new account
+                {t('auth.login.createAccount')}
               </Link>
             </p>
           ) : !mustReset && !oidcEnforced ? (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Sign in with an existing account.
+              {t('auth.login.existingAccount')}
             </p>
           ) : mustReset ? (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Your admin requires you to set a new password before using ExcaliDash.
+              {t('auth.login.mustResetMessage')}
             </p>
           ) : (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              You will be redirected to {oidcProvider || 'your identity provider'}.
+              {t('auth.login.oidcRedirectMessage', { oidcProvider: oidcProvider || 'OIDC' })}
             </p>
           )}
         </div>
@@ -197,7 +203,7 @@ export const Login: React.FC = () => {
                 onClick={() => api.startOidcSignIn(oidcReturnTo)}
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Continue with {oidcProvider || 'OIDC'}
+                {t('auth.login.continueWithOidc', { oidcProvider: oidcProvider || 'OIDC' })}
               </button>
             </div>
           ) : (
@@ -207,7 +213,7 @@ export const Login: React.FC = () => {
                 <>
                   <div>
                     <label htmlFor="email" className="sr-only">
-                      Email address
+                      {t('common.email')}
                     </label>
                     <input
                       id="email"
@@ -216,14 +222,14 @@ export const Login: React.FC = () => {
                       autoComplete="email"
                       required
                       className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-800 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                      placeholder="Email address"
+                      placeholder={t('common.email')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
                   <div>
                     <label htmlFor="password" className="sr-only">
-                      Password
+                      {t('common.password')}
                     </label>
                     <input
                       id="password"
@@ -232,7 +238,7 @@ export const Login: React.FC = () => {
                       autoComplete="current-password"
                       required
                       className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-800 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                      placeholder="Password"
+                      placeholder={t('common.password')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
@@ -322,7 +328,7 @@ export const Login: React.FC = () => {
                 onClick={() => api.startOidcSignIn('/')}
                 className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-700 text-sm font-medium rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Continue with {oidcProvider || 'OIDC'}
+                {t('auth.login.continueWithOidc', { oidcProvider: oidcProvider || 'OIDC' })}
               </button>
             </div>
           )}

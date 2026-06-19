@@ -6,6 +6,10 @@ at runtime and appears only in legacy migration guidance.
 PostgreSQL provides production persistence, consistent schema migrations,
 concurrent access, and predictable deployments.
 
+PostgreSQL is always the **source of truth**. The optional Redis layer
+([redis.md](redis.md)) only caches hot drawings and metadata and coordinates
+saves; it never replaces PostgreSQL and the app runs fully without it.
+
 ## Variables
 
 - `POSTGRES_DB`: database created by the bundled PostgreSQL container.
@@ -35,6 +39,54 @@ npx prisma migrate deploy
 ```
 
 The backend container applies committed migrations at startup by default.
+
+## Snapshot retention (DrawingSnapshot)
+
+ExcaliDash V2 keeps only the latest N snapshots per drawing by default to prevent
+PostgreSQL growth from large Excalidraw files with embedded images. Saves are
+optimized to avoid creating large snapshots on every autosave.
+
+Without retention, a single large board (hundreds of embedded images / dataURLs)
+can accumulate thousands of multi-MB snapshots. In one production incident the
+`DrawingSnapshot` table grew to ~36 GB; keeping the newest 15 per drawing and
+running `VACUUM FULL` brought it back to ~393 MB.
+
+Retention is enforced on each save (and optionally at startup). Tuning variables
+(see `.env.example`):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MAX_SNAPSHOTS_PER_DRAWING` | `15` | Keep newest N per drawing (`<= 0` disables). |
+| `SNAPSHOT_PRUNE_ON_SAVE` | `true` | Prune after creating a snapshot. |
+| `SNAPSHOT_PRUNE_ON_STARTUP` | `false` | One-shot count-based prune at boot. |
+| `SNAPSHOT_MIN_INTERVAL_SECONDS` | `300` | Min seconds between snapshots/drawing. |
+| `SNAPSHOT_ON_EVERY_SAVE` | `false` | Snapshot every save (overrides interval). |
+| `SNAPSHOT_FORCE_ON_VERSION_CHANGE` | `true` | Always snapshot manual save / restore. |
+| `SNAPSHOT_ASYNC` | `true` | Write/prune off the response path. |
+
+Retention ordering is `version DESC, createdAt DESC, id DESC`, backed by the
+`DrawingSnapshot_drawingId_version_createdAt_idx` index.
+
+### Manual prune
+
+A safe, dry-run-by-default admin script is provided:
+
+```bash
+# preview only (no deletes)
+node scripts/prune-snapshots.cjs --keep 15 --dry-run
+
+# apply
+node scripts/prune-snapshots.cjs --keep 15 --confirm
+
+# a single drawing
+node scripts/prune-snapshots.cjs --keep 15 --drawing-id <id> --confirm
+```
+
+After a large prune, reclaim disk with:
+
+```sql
+VACUUM (FULL, ANALYZE) "DrawingSnapshot";
+```
 
 ## Backup with `pg_dump`
 

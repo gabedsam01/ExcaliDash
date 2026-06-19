@@ -40,6 +40,8 @@ export interface McpFakePrisma {
   };
   drawingSnapshot: {
     create(args: any): Promise<any>;
+    findMany(args: any): Promise<Array<{ id: string }>>;
+    deleteMany(args: any): Promise<{ count: number }>;
   };
   apiKey: {
     findUnique(args: any): Promise<any | null>;
@@ -106,6 +108,32 @@ export const createMcpFakePrisma = (): McpFakePrisma => {
         const snap = { id: genId("snap"), ...data, createdAt: new Date() };
         snapshots.push(snap);
         return { ...snap };
+      },
+      async findMany({ where, skip, take }: any) {
+        // Mirror retention ordering: version DESC, createdAt DESC, id DESC.
+        const ranked = snapshots
+          .filter((s) => s.drawingId === where.drawingId)
+          .sort((a, b) => {
+            if (b.version !== a.version) return b.version - a.version;
+            const at = new Date(a.createdAt).getTime();
+            const bt = new Date(b.createdAt).getTime();
+            if (bt !== at) return bt - at;
+            return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+          });
+        const sliced = ranked.slice(skip ?? 0, take !== undefined ? (skip ?? 0) + take : undefined);
+        return sliced.map((s) => ({ id: s.id }));
+      },
+      async deleteMany({ where }: any) {
+        const ids: string[] = where?.id?.in ?? [];
+        let count = 0;
+        for (const id of ids) {
+          const index = snapshots.findIndex((s) => s.id === id);
+          if (index !== -1) {
+            snapshots.splice(index, 1);
+            count += 1;
+          }
+        }
+        return { count };
       },
     },
     apiKey: {

@@ -1,0 +1,359 @@
+{
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "rename": "Renomear",
+    "create": "Criar",
+    "duplicate": "Duplicar",
+    "export": "Exportar",
+    "import": "Importar",
+    "search": "Buscar",
+    "loading": "Carregando...",
+    "ok": "OK",
+    "close": "Fechar",
+    "confirm": "Confirmar",
+    "new": "Novo",
+    "edit": "Editar",
+    "change": "Alterar",
+    "email": "E-mail",
+    "password": "Senha",
+    "name": "Nome",
+    "or": "Ou",
+    "logout": "Sair",
+    "goBack": "Voltar",
+    "elements": "Elementos"
+  },
+  "language": {
+    "label": "Idioma",
+    "english": "English",
+    "portugueseBR": "Português (Brasil)"
+  },
+  "auth": {
+    "login": {
+      "title": "Entrar no ExcaliDash",
+      "subtitle": "Bem-vindo de volta",
+      "submit": "Entrar",
+      "signingIn": "Entrando...",
+      "createAccount": "criar uma nova conta",
+      "existingAccount": "Entre com uma conta existente.",
+      "forgotPassword": "Esqueceu a senha?",
+      "signInDifferentUser": "Entrar com outro usuário",
+      "resetTitle": "Redefinir sua senha",
+      "oidcTitle": "Entrar com {{oidcProvider}}",
+      "continueWithOidc": "Continuar com {{oidcProvider}}",
+      "oidcRedirectMessage": "Você será redirecionado para {{oidcProvider}}.",
+      "mustResetMessage": "Você precisa definir uma nova senha antes de continuar."
+    },
+    "register": {
+      "title": "Crie sua conta",
+      "bootstrapTitle": "Configurar o primeiro administrador",
+      "bootstrapMessage": "Esta é a primeira conta, portanto ela será a administradora.",
+      "submit": "Criar conta",
+      "creatingAccount": "Criando conta...",
+      "signIn": "Entrar",
+      "yourName": "Seu nome",
+      "setupCode": "Código de configuração único",
+      "oneTimeSetupCode": "Código de configuração único",
+      "findInLogs": "Encontre este código nos logs do servidor.",
+      "copyCommand": "Copiar comando",
+      "copiedCommand": "Copiado!",
+      "dockerComposeNote": "Execute este comando para ler o código nos logs do contêiner.",
+      "orCreateLocal": "Ou crie uma conta local",
+      "setupWithOidc": "Configurar administrador com {{oidcProvider}}"
+    },
+    "setup": {
+      "chooseMode": "Escolha o modo de autenticação",
+      "newSetup": "Nova configuração",
+      "migrationDetected": "Dados existentes detectados",
+      "migrationInfo": "Detectamos desenhos existentes. Escolha como a autenticação deve funcionar.",
+      "recommendation": "Recomendado para a maioria das instalações self-hosted.",
+      "enableNow": "Ativar autenticação",
+      "enableDescription": "Exigir uma conta para entrar e manter os desenhos privados.",
+      "enableButton": "Ativar autenticação",
+      "keepDisabledButton": "Manter desativada",
+      "privateNetworkNote": "Faça isso apenas em uma rede privada confiável.",
+      "disabledWarning": "Qualquer pessoa que acessar este servidor terá acesso total.",
+      "confirmDisable": "Tem certeza de que deseja manter a autenticação desativada?",
+      "confirmDisableButton": "Sim, manter desativada"
+    },
+    "reset": {
+      "title": "Redefinir sua senha",
+      "newPassword": "Nova senha",
+      "confirmPassword": "Confirmar senha",
+      "setNewPassword": "Definir nova senha",
+      "submitButton": "Redefinir senha",
+      "setPasswordTitle": "Defina uma nova senha",
+      "enterPasswordMessage": "Digite uma nova senha para a sua conta.",
+      "successTitle": "Senha atualizada",
+      "successMessage": "Sua senha foi redefinida. Agora você pode entrar.",
+      "goToLogin": "Ir para o login",
+      "backToLogin": "Voltar ao login",
+      "noEmailsMessage": "Este servidor não envia e-mails.",
+      "contactAdminInstructions": "Peça a um administrador para redefinir sua senha.",
+      "adminLockedOutInstructions": "Se você é o administrador, use o comando de recuperação no servidor."
+    },
+    "errors": {
+      "loginFailed": "Falha ao entrar. Verifique suas credenciais.",
+      "oidcSignInFailed": "Falha no login único. Tente novamente.",
+      "passwordRequired": "A senha é obrigatória.",
+      "passwordMismatch": "As senhas não coincidem.",
+      "resetPasswordFailed": "Não foi possível redefinir a senha. Tente novamente.",
+      "resetNotEnabled": "A redefinição de senha não está habilitada neste servidor.",
+      "invalidResetLink": "Este link de redefinição é inválido.",
+      "invalidResetToken": "Este link de redefinição é inválido ou expirou.",
+      "setupCodeRequired": "O código de configuração é obrigatório.",
+      "registerFailed": "Não foi possível criar a conta. Tente novamente.",
+      "setupChoiceFailed": "Não foi possível salvar sua escolha. Tente novamente."
+    }
+  },
+  "dashboard": {
+    "views": {
+      "allDrawings": "Todos os desenhos",
+      "sharedWithMe": "Compartilhados comigo"
+    },
+    "search": {
+      "placeholder": "Buscar desenhos...",
+      "clearSearch": "Limpar busca"
+    },
+    "actions": {
+      "newDrawing": "Novo desenho",
+      "import": "Importar",
+      "selectAll": "Selecionar tudo",
+      "deselectAll": "Desmarcar tudo",
+      "moveToTrash": "Mover para a lixeira",
+      "deletePermanently": "Excluir permanentemente",
+      "duplicateSelected": "Duplicar selecionados",
+      "moveSelected": "Mover selecionados",
+      "deleteMultiple": "Excluir {{count}} desenhos"
+    },
+    "sort": {
+      "ascending": "Ordem crescente",
+      "descending": "Ordem decrescente",
+      "options": {
+        "name": "Nome",
+        "dateCreated": "Data de criação",
+        "dateModified": "Data de modificação"
+      }
+    },
+    "menu": {
+      "rename": "Renomear",
+      "moveTo": "Mover para...",
+      "duplicate": "Duplicar",
+      "export": "Exportar",
+      "delete": "Excluir",
+      "moveItemsTo": "Mover {{count}} itens para...",
+      "unorganized": "Sem organização"
+    },
+    "card": {
+      "shared": "Compartilhado",
+      "lastEdited": "há {{time}}"
+    },
+    "empty": {
+      "trashEmpty": "Sua lixeira está vazia",
+      "noDrawings": "Nenhum desenho encontrado",
+      "noSearchResults": "Nenhum resultado para \"{{search}}\"",
+      "createDrawingHint": "Crie um novo desenho para começar!"
+    },
+    "states": {
+      "exporting": "Exportando...",
+      "loadingMore": "Carregando mais..."
+    },
+    "dragDrop": {
+      "dropFilesHeading": "Solte arquivos para importar",
+      "dropInstruction": "Solte arquivos .excalidraw ou .json aqui para adicioná-los a {{viewTitle}}"
+    },
+    "confirm": {
+      "deleteDrawing": "Excluir desenho",
+      "deleteDrawingMessage": "Tem certeza de que deseja excluir permanentemente este desenho? Esta ação não pode ser desfeita.",
+      "deleteSelectedDrawings": "Excluir desenhos selecionados",
+      "deleteSelectedMessage": "Tem certeza de que deseja excluir permanentemente {{count}} desenhos? Esta ação não pode ser desfeita."
+    },
+    "errors": {
+      "importFailed": "Falha na importação",
+      "exportFailed": "Falha ao exportar o desenho. Tente novamente.",
+      "libraryImportNotSupported": "Importações de biblioteca (.excalidrawlib) não são suportadas aqui. Importe desenhos (.excalidraw/.json) em vez disso."
+    }
+  },
+  "collections": {
+    "unorganized": "Sem organização",
+    "trash": "Lixeira",
+    "collection": "Coleção"
+  },
+  "sidebar": {
+    "sections": {
+      "library": "Biblioteca",
+      "collections": "Coleções"
+    },
+    "nav": {
+      "allDrawings": "Todos os desenhos",
+      "sharedWithMe": "Compartilhados comigo",
+      "unorganized": "Sem organização",
+      "trash": "Lixeira",
+      "profile": "Perfil",
+      "admin": "Administração",
+      "settings": "Configurações"
+    },
+    "actions": {
+      "newCollection": "Nova coleção"
+    },
+    "inputs": {
+      "newCollectionPlaceholder": "Nova coleção..."
+    },
+    "menu": {
+      "renameCollection": "Renomear coleção",
+      "deleteCollection": "Excluir coleção",
+      "newCollection": "Nova coleção"
+    },
+    "confirm": {
+      "deleteCollectionTitle": "Excluir coleção",
+      "deleteCollectionMessage": "Tem certeza de que deseja excluir esta coleção? Todos os desenhos dentro dela serão movidos para Sem organização."
+    }
+  },
+  "layout": {
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "dragToResizeSidebar": "Arraste para redimensionar a barra lateral"
+  },
+  "settings": {
+    "title": "Configurações",
+    "tabs": {
+      "apiKeys": "Chaves de API / MCP",
+      "libraries": "Bibliotecas",
+      "export": "Exportar",
+      "appearance": "Aparência",
+      "updates": "Atualizações",
+      "advanced": "Avançado"
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Escolha o idioma da interface do ExcaliDash."
+    },
+    "appearance": {
+      "title": "Aparência",
+      "theme": "Tema",
+      "themeLight": "Claro",
+      "themeDark": "Escuro",
+      "themeSystem": "Sistema"
+    },
+    "apiKeys": {
+      "heading": "Chaves de API / MCP",
+      "description": "Crie chaves de API para conectar assistentes de IA (Claude, Codex) ao ExcaliDash via MCP.",
+      "createKey": "Criar chave de API",
+      "keyName": "Nome da chave",
+      "keyNamePlaceholder": "ex.: Meu notebook",
+      "noKeys": "Nenhuma chave de API ainda.",
+      "created": "Criada em {{date}}",
+      "lastUsed": "Último uso em {{date}}",
+      "neverUsed": "Nunca usada",
+      "revoke": "Revogar",
+      "deleteKeyAriaLabel": "Excluir chave {{name}}",
+      "oneTimeTokenTitle": "Copie sua chave de API agora",
+      "oneTimeTokenMessage": "Esta chave é exibida apenas uma vez. Guarde-a em um lugar seguro.",
+      "copy": "Copiar",
+      "copied": "Copiado!",
+      "closeTokenButton": "Fechar token único"
+    },
+    "mcp": {
+      "heading": "Conectar um cliente MCP",
+      "description": "Use um comando para conectar seu assistente de IA a este servidor MCP do ExcaliDash.",
+      "claudeCodeSetup": "Configuração do Claude Code",
+      "codexSetup": "Configuração do Codex",
+      "scopeUser": "Usuário",
+      "scopeProject": "Projeto",
+      "copyScopeCommand": "Copiar comando de {{scope}}",
+      "skillsHeading": "Instalar as skills do ExcaliDash",
+      "skillsDescription": "Opcional: instale skills prontas para o seu assistente."
+    },
+    "libraries": {
+      "heading": "Bibliotecas",
+      "description": "Navegue e gerencie pacotes de bibliotecas do Excalidraw.",
+      "searchPlaceholder": "Buscar bibliotecas...",
+      "empty": "Nenhuma biblioteca encontrada.",
+      "loading": "Carregando bibliotecas...",
+      "cacheAriaLabel": "Armazenar em cache ou inspecionar {{name}}"
+    },
+    "export": {
+      "heading": "Exportar um backup",
+      "description": "Baixe todos os seus desenhos e coleções em um único arquivo.",
+      "exportButton": "Exportar backup",
+      "exporting": "Exportando..."
+    },
+    "updates": {
+      "heading": "Atualizações",
+      "checkButton": "Verificar atualizações",
+      "checking": "Verificando...",
+      "upToDate": "Você está na versão mais recente.",
+      "updateAvailable": "Uma nova versão está disponível: {{version}}",
+      "currentVersion": "Versão atual: {{version}}"
+    }
+  },
+  "profile": {
+    "title": "Perfil",
+    "personalInfo": {
+      "heading": "Informações pessoais",
+      "email": "E-mail",
+      "name": "Nome",
+      "save": "Salvar alterações"
+    },
+    "password": {
+      "heading": "Alterar senha",
+      "current": "Senha atual",
+      "new": "Nova senha",
+      "confirm": "Confirmar nova senha",
+      "submit": "Alterar senha"
+    }
+  },
+  "editor": {
+    "saveStatus": {
+      "saving": "Salvando…",
+      "saved": "Salvo",
+      "error": "Falha ao salvar",
+      "retrying": "Tentando novamente…"
+    },
+    "chrome": {
+      "readOnly": "Somente leitura"
+    },
+    "buttons": {
+      "versionHistory": "Histórico de versões",
+      "share": "Compartilhar",
+      "exportDrawing": "Exportar desenho",
+      "enableAutoHide": "Ativar ocultar automaticamente",
+      "disableAutoHide": "Desativar ocultar automaticamente"
+    },
+    "history": {
+      "panelTitle": "Histórico de versões",
+      "totalVersionCount": "{{count}} versões",
+      "versionLabel": "Versão {{version}}",
+      "preview": "Visualizar",
+      "hide": "Ocultar",
+      "restore": "Restaurar",
+      "restoreConfirm": "Confirmar?",
+      "restoring": "Restaurando...",
+      "loadingHistory": "Carregando histórico...",
+      "noHistory": "Nenhum histórico ainda",
+      "noHistoryDesc": "O histórico de versões é criado automaticamente quando você salva alterações.",
+      "loadingPreview": "Carregando visualização...",
+      "failedLoadPreview": "Falha ao carregar a visualização",
+      "previewElements": "Elementos:",
+      "versionRetention": "As versões são mantidas por 2 dias"
+    },
+    "errors": {
+      "drawingConflict": "O desenho mudou em outra aba. Atualize para carregar a versão mais recente.",
+      "failedSaveChanges": "Falha ao salvar as alterações",
+      "failedSaveLibrary": "Falha ao salvar a biblioteca",
+      "failedLoadDrawing": "Falha ao carregar o desenho",
+      "accessDenied": "Você não tem acesso a este desenho",
+      "notFound": "Desenho não encontrado",
+      "failedImportDropped": "Falha ao importar as imagens soltas",
+      "failedSaveBeforeLeave": "Falha ao salvar as alterações. Tente novamente antes de sair.",
+      "failedImportLibrary": "Falha ao importar a biblioteca"
+    }
+  },
+  "upload": {
+    "header": "Uploads ({{activeCount}} ativos)",
+    "headerDone": "Uploads (Concluído)",
+    "clearAll": "Limpar tudo",
+    "failed": "Falhou"
+  }
+}

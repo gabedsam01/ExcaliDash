@@ -1,0 +1,359 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "rename": "Rename",
+    "create": "Create",
+    "duplicate": "Duplicate",
+    "export": "Export",
+    "import": "Import",
+    "search": "Search",
+    "loading": "Loading...",
+    "ok": "OK",
+    "close": "Close",
+    "confirm": "Confirm",
+    "new": "New",
+    "edit": "Edit",
+    "change": "Change",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "or": "Or",
+    "logout": "Logout",
+    "goBack": "Go Back",
+    "elements": "Elements"
+  },
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "portugueseBR": "Português (Brasil)"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in to ExcaliDash",
+      "subtitle": "Welcome back",
+      "submit": "Sign In",
+      "signingIn": "Signing in...",
+      "createAccount": "create a new account",
+      "existingAccount": "Sign in with an existing account.",
+      "forgotPassword": "Forgot password?",
+      "signInDifferentUser": "Sign in as a different user",
+      "resetTitle": "Reset your password",
+      "oidcTitle": "Sign in with {{oidcProvider}}",
+      "continueWithOidc": "Continue with {{oidcProvider}}",
+      "oidcRedirectMessage": "You will be redirected to {{oidcProvider}}.",
+      "mustResetMessage": "You must set a new password before continuing."
+    },
+    "register": {
+      "title": "Create your account",
+      "bootstrapTitle": "Set up the first admin",
+      "bootstrapMessage": "This is the first account, so it will be the administrator.",
+      "submit": "Create Account",
+      "creatingAccount": "Creating account...",
+      "signIn": "Sign in",
+      "yourName": "Your name",
+      "setupCode": "One-time setup code",
+      "oneTimeSetupCode": "One-time setup code",
+      "findInLogs": "Find this code in the server logs.",
+      "copyCommand": "Copy command",
+      "copiedCommand": "Copied!",
+      "dockerComposeNote": "Run this command to read the code from the container logs.",
+      "orCreateLocal": "Or create a local account",
+      "setupWithOidc": "Set up admin with {{oidcProvider}}"
+    },
+    "setup": {
+      "chooseMode": "Choose authentication mode",
+      "newSetup": "New setup",
+      "migrationDetected": "Existing data detected",
+      "migrationInfo": "We detected existing drawings. Choose how authentication should work.",
+      "recommendation": "Recommended for most self-hosted setups.",
+      "enableNow": "Enable authentication",
+      "enableDescription": "Require an account to sign in and keep drawings private.",
+      "enableButton": "Enable authentication",
+      "keepDisabledButton": "Keep it disabled",
+      "privateNetworkNote": "Only do this on a trusted private network.",
+      "disabledWarning": "Anyone who can reach this server will have full access.",
+      "confirmDisable": "Are you sure you want to keep authentication disabled?",
+      "confirmDisableButton": "Yes, keep it disabled"
+    },
+    "reset": {
+      "title": "Reset your password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm password",
+      "setNewPassword": "Set new password",
+      "submitButton": "Reset password",
+      "setPasswordTitle": "Set a new password",
+      "enterPasswordMessage": "Enter a new password for your account.",
+      "successTitle": "Password updated",
+      "successMessage": "Your password has been reset. You can now sign in.",
+      "goToLogin": "Go to sign in",
+      "backToLogin": "Back to sign in",
+      "noEmailsMessage": "This server does not send emails.",
+      "contactAdminInstructions": "Ask an administrator to reset your password.",
+      "adminLockedOutInstructions": "If you are the administrator, use the recovery command on the server."
+    },
+    "errors": {
+      "loginFailed": "Sign in failed. Check your credentials.",
+      "oidcSignInFailed": "Single sign-on failed. Please try again.",
+      "passwordRequired": "Password is required.",
+      "passwordMismatch": "Passwords do not match.",
+      "resetPasswordFailed": "Could not reset the password. Please try again.",
+      "resetNotEnabled": "Password reset is not enabled on this server.",
+      "invalidResetLink": "This reset link is invalid.",
+      "invalidResetToken": "This reset link is invalid or has expired.",
+      "setupCodeRequired": "The setup code is required.",
+      "registerFailed": "Could not create the account. Please try again.",
+      "setupChoiceFailed": "Could not save your choice. Please try again."
+    }
+  },
+  "dashboard": {
+    "views": {
+      "allDrawings": "All Drawings",
+      "sharedWithMe": "Shared with me"
+    },
+    "search": {
+      "placeholder": "Search drawings...",
+      "clearSearch": "Clear search"
+    },
+    "actions": {
+      "newDrawing": "New Drawing",
+      "import": "Import",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "moveToTrash": "Move to Trash",
+      "deletePermanently": "Delete Permanently",
+      "duplicateSelected": "Duplicate Selected",
+      "moveSelected": "Move Selected",
+      "deleteMultiple": "Delete {{count}} Drawings"
+    },
+    "sort": {
+      "ascending": "Sort Ascending",
+      "descending": "Sort Descending",
+      "options": {
+        "name": "Name",
+        "dateCreated": "Date Created",
+        "dateModified": "Date Modified"
+      }
+    },
+    "menu": {
+      "rename": "Rename",
+      "moveTo": "Move to...",
+      "duplicate": "Duplicate",
+      "export": "Export",
+      "delete": "Delete",
+      "moveItemsTo": "Move {{count}} items to...",
+      "unorganized": "Unorganized"
+    },
+    "card": {
+      "shared": "Shared",
+      "lastEdited": "{{time}} ago"
+    },
+    "empty": {
+      "trashEmpty": "Your trash is empty",
+      "noDrawings": "No drawings found",
+      "noSearchResults": "No results for \"{{search}}\"",
+      "createDrawingHint": "Create a new drawing to get started!"
+    },
+    "states": {
+      "exporting": "Exporting...",
+      "loadingMore": "Loading more..."
+    },
+    "dragDrop": {
+      "dropFilesHeading": "Drop files to import",
+      "dropInstruction": "Drop .excalidraw or .json files here to add them to {{viewTitle}}"
+    },
+    "confirm": {
+      "deleteDrawing": "Delete Drawing",
+      "deleteDrawingMessage": "Are you sure you want to permanently delete this drawing? This action cannot be undone.",
+      "deleteSelectedDrawings": "Delete Selected Drawings",
+      "deleteSelectedMessage": "Are you sure you want to permanently delete {{count}} drawings? This action cannot be undone."
+    },
+    "errors": {
+      "importFailed": "Import Failed",
+      "exportFailed": "Failed to export drawing. Please try again.",
+      "libraryImportNotSupported": "Library (.excalidrawlib) imports are not supported here. Please import drawings (.excalidraw/.json) instead."
+    }
+  },
+  "collections": {
+    "unorganized": "Unorganized",
+    "trash": "Trash",
+    "collection": "Collection"
+  },
+  "sidebar": {
+    "sections": {
+      "library": "Library",
+      "collections": "Collections"
+    },
+    "nav": {
+      "allDrawings": "All Drawings",
+      "sharedWithMe": "Shared with me",
+      "unorganized": "Unorganized",
+      "trash": "Trash",
+      "profile": "Profile",
+      "admin": "Admin",
+      "settings": "Settings"
+    },
+    "actions": {
+      "newCollection": "New Collection"
+    },
+    "inputs": {
+      "newCollectionPlaceholder": "New Collection..."
+    },
+    "menu": {
+      "renameCollection": "Rename Collection",
+      "deleteCollection": "Delete Collection",
+      "newCollection": "New Collection"
+    },
+    "confirm": {
+      "deleteCollectionTitle": "Delete Collection",
+      "deleteCollectionMessage": "Are you sure you want to delete this collection? All drawings inside will be moved to Unorganized."
+    }
+  },
+  "layout": {
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "dragToResizeSidebar": "Drag to resize sidebar"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "apiKeys": "API Keys / MCP",
+      "libraries": "Libraries",
+      "export": "Export",
+      "appearance": "Appearance",
+      "updates": "Updates",
+      "advanced": "Advanced"
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose the language for the ExcaliDash interface."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "theme": "Theme",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeSystem": "System"
+    },
+    "apiKeys": {
+      "heading": "API Keys / MCP",
+      "description": "Create API keys to connect AI assistants (Claude, Codex) to ExcaliDash via MCP.",
+      "createKey": "Create API key",
+      "keyName": "Key name",
+      "keyNamePlaceholder": "e.g. My laptop",
+      "noKeys": "No API keys yet.",
+      "created": "Created {{date}}",
+      "lastUsed": "Last used {{date}}",
+      "neverUsed": "Never used",
+      "revoke": "Revoke",
+      "deleteKeyAriaLabel": "Delete key {{name}}",
+      "oneTimeTokenTitle": "Copy your API key now",
+      "oneTimeTokenMessage": "This key is shown only once. Store it somewhere safe.",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "closeTokenButton": "Close one-time token"
+    },
+    "mcp": {
+      "heading": "Connect an MCP client",
+      "description": "Use one command to connect your AI assistant to this ExcaliDash MCP server.",
+      "claudeCodeSetup": "Claude Code setup",
+      "codexSetup": "Codex setup",
+      "scopeUser": "User",
+      "scopeProject": "Project",
+      "copyScopeCommand": "Copy {{scope}} command",
+      "skillsHeading": "Install the ExcaliDash skills",
+      "skillsDescription": "Optional: install ready-made skills for your assistant."
+    },
+    "libraries": {
+      "heading": "Libraries",
+      "description": "Browse and manage Excalidraw library packs.",
+      "searchPlaceholder": "Search libraries...",
+      "empty": "No libraries found.",
+      "loading": "Loading libraries...",
+      "cacheAriaLabel": "Cache or inspect {{name}}"
+    },
+    "export": {
+      "heading": "Export a backup",
+      "description": "Download all your drawings and collections as a single archive.",
+      "exportButton": "Export backup",
+      "exporting": "Exporting..."
+    },
+    "updates": {
+      "heading": "Updates",
+      "checkButton": "Check for updates",
+      "checking": "Checking...",
+      "upToDate": "You are on the latest version.",
+      "updateAvailable": "A new version is available: {{version}}",
+      "currentVersion": "Current version: {{version}}"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "personalInfo": {
+      "heading": "Personal information",
+      "email": "Email",
+      "name": "Name",
+      "save": "Save changes"
+    },
+    "password": {
+      "heading": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Change password"
+    }
+  },
+  "editor": {
+    "saveStatus": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "error": "Save failed",
+      "retrying": "Retrying…"
+    },
+    "chrome": {
+      "readOnly": "Read-only"
+    },
+    "buttons": {
+      "versionHistory": "Version History",
+      "share": "Share",
+      "exportDrawing": "Export drawing",
+      "enableAutoHide": "Enable auto-hide",
+      "disableAutoHide": "Disable auto-hide"
+    },
+    "history": {
+      "panelTitle": "Version History",
+      "totalVersionCount": "{{count}} versions",
+      "versionLabel": "Version {{version}}",
+      "preview": "Preview",
+      "hide": "Hide",
+      "restore": "Restore",
+      "restoreConfirm": "Confirm?",
+      "restoring": "Restoring...",
+      "loadingHistory": "Loading history...",
+      "noHistory": "No history yet",
+      "noHistoryDesc": "Version history is created automatically when you save changes.",
+      "loadingPreview": "Loading preview...",
+      "failedLoadPreview": "Failed to load preview",
+      "previewElements": "Elements:",
+      "versionRetention": "Versions are kept for 2 days"
+    },
+    "errors": {
+      "drawingConflict": "Drawing changed in another tab. Refresh to load latest.",
+      "failedSaveChanges": "Failed to save changes",
+      "failedSaveLibrary": "Failed to save library",
+      "failedLoadDrawing": "Failed to load drawing",
+      "accessDenied": "You do not have access to this drawing",
+      "notFound": "Drawing not found",
+      "failedImportDropped": "Failed to import dropped images",
+      "failedSaveBeforeLeave": "Failed to save changes. Please retry before leaving.",
+      "failedImportLibrary": "Failed to import library"
+    }
+  },
+  "upload": {
+    "header": "Uploads ({{activeCount}} active)",
+    "headerDone": "Uploads (Done)",
+    "clearAll": "Clear All",
+    "failed": "Failed"
+  }
+}

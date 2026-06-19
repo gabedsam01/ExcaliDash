@@ -47,12 +47,14 @@ function buildApp() {
       findMany: vi.fn(),
       updateMany: vi.fn(),
       update: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     },
     drawingSnapshot: {
       create: vi.fn(),
-      findMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
       count: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     drawingPermission: { findMany: vi.fn().mockResolvedValue([]) },
     drawingLinkShare: { findMany: vi.fn().mockResolvedValue([]) },
@@ -67,6 +69,8 @@ function buildApp() {
     next();
   });
 
+  const drawingUpdateSchema = { safeParse: vi.fn() };
+
   registerDrawingRoutes(app, {
     prisma,
     requireAuth: (_req: any, _res: any, next: any) => next(),
@@ -75,19 +79,44 @@ function buildApp() {
     parseJsonField: (val: string, fallback: any) => { try { return JSON.parse(val); } catch { return fallback; } },
     validateImportedDrawing: vi.fn().mockReturnValue(true),
     drawingCreateSchema: { safeParse: vi.fn().mockReturnValue({ success: true, data: {} }) },
-    drawingUpdateSchema: { safeParse: vi.fn() },
+    drawingUpdateSchema,
     respondWithValidationErrors: vi.fn(),
     ensureTrashCollection: vi.fn(),
     invalidateDrawingsCache: vi.fn(),
     buildDrawingsCacheKey: vi.fn(),
     getCachedDrawingsBody: vi.fn().mockReturnValue(null),
-    cacheDrawingsResponse: vi.fn(),
+    cacheDrawingsResponse: vi.fn(
+      (_key: string, payload: unknown) => Buffer.from(JSON.stringify(payload)),
+    ),
     MAX_PAGE_SIZE: 100,
-    config: { nodeEnv: "test", enableAuditLogging: false },
+    config: {
+      nodeEnv: "test",
+      enableAuditLogging: false,
+      snapshots: {
+        maxPerDrawing: 15,
+        pruneOnSave: true,
+        pruneOnStartup: false,
+        minIntervalSeconds: 300,
+        onEverySave: false,
+        forceOnVersionChange: true,
+        async: false,
+      },
+      imageOptimization: {
+        enabled: false,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        webpQuality: 82,
+        jpegQuality: 82,
+        pngCompressionLevel: 9,
+        minBytes: 200000,
+        cacheEnabled: true,
+      },
+      savePerf: { enabled: false, slowMs: 1000 },
+    },
     logAuditEvent: vi.fn(),
   });
 
-  return { app, prisma };
+  return { app, prisma, drawingUpdateSchema };
 }
 
 describe("Drawing Version History", () => {
@@ -224,33 +253,89 @@ describe("Drawing Version History", () => {
     });
   });
 
-  describe("Snapshot creation on scene update", () => {
-    it("creates a snapshot when elements are updated", async () => {
-      prisma.drawing.findUnique.mockResolvedValue(mockDrawing);
-      prisma.drawing.findFirst.mockResolvedValue(mockDrawing);
-      prisma.drawingUpdateSchema = { safeParse: vi.fn() };
-      prisma.drawingSnapshot.create.mockResolvedValue({});
-      prisma.drawing.updateMany.mockResolvedValue({ count: 1 });
+  describe("Smart snapshot on scene update (PUT /drawings/:id)", () => {
+    const sceneUpdate = {
+      elements: [{ id: "el-new", type: "text" }],
+      appState: { viewBackgroundColor: "#000" },
+      version: 5,
+    };
 
-      // Reconfigure drawingUpdateSchema mock for this test
-      const { app: testApp, prisma: testPrisma } = buildApp();
-      const updatePayload = {
-        elements: [{ id: "el-new", type: "text" }],
-        appState: { viewBackgroundColor: "#000" },
-        version: 5,
-      };
+    const setupSceneSave = (
+      ctx: ReturnType<typeof buildApp>,
+      lastSnapshot: { createdAt: Date } | null,
+    ) => {
+      ctx.prisma.drawing.findUnique.mockResolvedValue(mockDrawing);
+      ctx.prisma.drawing.updateMany.mockResolvedValue({ count: 1 });
+      ctx.prisma.drawing.findFirst.mockResolvedValue({ ...mockDrawing, version: 6 });
+      ctx.prisma.drawingSnapshot.findFirst.mockResolvedValue(lastSnapshot);
+      ctx.prisma.drawingSnapshot.create.mockResolvedValue({});
+      ctx.drawingUpdateSchema.safeParse.mockReturnValue({ success: true, data: sceneUpdate });
+    };
 
-      // Mock the schema validation to return the payload
-      (testApp as any)._router = undefined; // Force re-init
-      // We need to test the PUT handler behavior directly
-      testPrisma.drawing.findUnique.mockResolvedValue(mockDrawing);
-      testPrisma.drawing.findFirst.mockResolvedValue({ ...mockDrawing, version: 6 });
-      testPrisma.drawingSnapshot.create.mockResolvedValue({});
-      testPrisma.drawing.updateMany.mockResolvedValue({ count: 1 });
+    it("creates the FIRST snapshot when the drawing has no history yet", async () => {
+      const ctx = buildApp();
+      setupSceneSave(ctx, null); // no prior snapshot
 
-      // This validates that the snapshot creation was wired in
-      // The actual integration is best tested in E2E
-      expect(true).toBe(true);
+      const res = await request(ctx.app)
+        .put(`/drawings/${MOCK_DRAWING_ID}`)
+        .send(sceneUpdate);
+
+      expect(res.status).toBe(200);
+      // Pre-update state is captured (version 5 = existing drawing version).
+      expect(ctx.prisma.drawingSnapshot.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          drawingId: MOCK_DRAWING_ID,
+          version: mockDrawing.version,
+          elements: mockDrawing.elements,
+        }),
+      });
+    });
+
+    it("does NOT create a snapshot again within the interval window", async () => {
+      const ctx = buildApp();
+      // A snapshot was just taken 1 second ago (< 300s interval).
+      setupSceneSave(ctx, { createdAt: new Date(Date.now() - 1000) });
+
+      const res = await request(ctx.app)
+        .put(`/drawings/${MOCK_DRAWING_ID}`)
+        .send(sceneUpdate);
+
+      expect(res.status).toBe(200);
+      expect(ctx.prisma.drawingSnapshot.create).not.toHaveBeenCalled();
+      // The drawing itself is still updated.
+      expect(ctx.prisma.drawing.updateMany).toHaveBeenCalled();
+    });
+
+    it("creates a snapshot once the interval has elapsed", async () => {
+      const ctx = buildApp();
+      // Last snapshot is 10 minutes old (> 300s interval).
+      setupSceneSave(ctx, { createdAt: new Date(Date.now() - 10 * 60 * 1000) });
+
+      const res = await request(ctx.app)
+        .put(`/drawings/${MOCK_DRAWING_ID}`)
+        .send(sceneUpdate);
+
+      expect(res.status).toBe(200);
+      expect(ctx.prisma.drawingSnapshot.create).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("List route excludes giant fields by default", () => {
+    it("GET /drawings selects only metadata (no elements/appState/files)", async () => {
+      const ctx = buildApp();
+      ctx.prisma.drawing.findMany.mockResolvedValue([]);
+      ctx.prisma.drawing.count.mockResolvedValue(0);
+
+      const res = await request(ctx.app).get(`/drawings`);
+
+      expect(res.status).toBe(200);
+      const findManyArgs = ctx.prisma.drawing.findMany.mock.calls[0][0];
+      expect(findManyArgs.select).toBeDefined();
+      expect(findManyArgs.select.elements).toBeUndefined();
+      expect(findManyArgs.select.appState).toBeUndefined();
+      expect(findManyArgs.select.files).toBeUndefined();
+      expect(findManyArgs.select.id).toBe(true);
+      expect(findManyArgs.select.preview).toBe(true);
     });
   });
 });

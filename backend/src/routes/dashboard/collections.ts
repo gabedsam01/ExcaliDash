@@ -1,6 +1,7 @@
 import express from "express";
 import { DashboardRouteDeps } from "./types";
 import { getUserTrashCollectionId, isTrashCollectionId } from "./trash";
+import { getCache } from "../../cache/cacheService";
 
 export const registerCollectionRoutes = (
   app: express.Express,
@@ -23,6 +24,13 @@ export const registerCollectionRoutes = (
     const trashCollectionId = getUserTrashCollectionId(req.user.id);
     await ensureTrashCollection(prisma, req.user.id);
 
+    const cache = getCache();
+    const cachedCollections = await cache.getCollectionsList<unknown[]>(req.user.id);
+    if (cachedCollections) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cachedCollections);
+    }
+
     const rawCollections = await prisma.collection.findMany({
       where: { userId: req.user.id },
       orderBy: { createdAt: "desc" },
@@ -35,6 +43,8 @@ export const registerCollectionRoutes = (
           ? { ...collection, id: "trash", name: "Trash" }
           : collection
       );
+    void cache.setCollectionsList(req.user.id, collections);
+    res.setHeader("X-Cache", "MISS");
     return res.json(collections);
   }));
 
@@ -53,6 +63,7 @@ export const registerCollectionRoutes = (
     const newCollection = await prisma.collection.create({
       data: { name: sanitizedName, userId: req.user.id },
     });
+    void getCache().invalidateCollections(req.user.id);
     return res.json(newCollection);
   }));
 
@@ -93,6 +104,7 @@ export const registerCollectionRoutes = (
     if (!updatedCollection) {
       return res.status(404).json({ error: "Collection not found" });
     }
+    void getCache().invalidateCollections(req.user.id);
     return res.json(updatedCollection);
   }));
 
@@ -119,6 +131,7 @@ export const registerCollectionRoutes = (
       prisma.collection.deleteMany({ where: { id, userId: req.user.id } }),
     ]);
     invalidateDrawingsCache();
+    void getCache().invalidateUserListings(req.user.id);
 
     if (config.enableAuditLogging) {
       await logAuditEvent({

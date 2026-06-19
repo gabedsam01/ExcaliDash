@@ -128,6 +128,31 @@ docker run --rm \
 
 Store both files outside the Docker host.
 
+## Snapshot retention
+
+ExcaliDash V2 keeps only the latest `MAX_SNAPSHOTS_PER_DRAWING` (default 15)
+snapshots per drawing so large Excalidraw files with embedded images don't
+balloon the `DrawingSnapshot` table. Saves are optimized to avoid creating large
+snapshots on every autosave. The relevant `.env` variables are documented in
+`.env.example`; to clean up an existing large table see
+[postgres.md](postgres.md) and `scripts/prune-snapshots.cjs`.
+
+## Redis (optional, recommended)
+
+Redis is optional but recommended for faster self-hosted deployments. PostgreSQL
+remains the source of truth; Redis caches hot drawings, metadata, and save
+coordination state. The quickstart `docker-compose.yml` ships a `redis` service
+and enables it by default (`REDIS_ENABLED=true`). To run without Redis, set
+`REDIS_ENABLED=false` in `.env` — the backend then uses PostgreSQL alone. If
+Redis is enabled but unreachable, the backend logs a warning and falls back to
+PostgreSQL automatically. See [redis.md](redis.md).
+
+## Language (i18n)
+
+The interface is available in English (default) and Brazilian Portuguese. Use the
+language button on the login, dashboard, and settings screens; the choice is
+saved in your browser. See [i18n.md](i18n.md).
+
 ## Runtime configuration status
 
 After authentication, the UI/API session can request:

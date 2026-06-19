@@ -66,14 +66,40 @@ Install the optional ExcaliDash V2 Agent Skills:
 npx -y @gabedsam01/excalidash-v2-skills@latest --local --yes
 ```
 
+## Redis (optional speed layer)
+
+Redis is optional but recommended for faster self-hosted deployments. PostgreSQL
+remains the source of truth; Redis caches hot drawings, metadata, and save
+coordination state. The quickstart enables it by default (`REDIS_ENABLED=true`);
+set `REDIS_ENABLED=false` to run without it. If Redis is unavailable the backend
+falls back to PostgreSQL automatically. See [docs/redis.md](docs/redis.md).
+
+## Language (English / Português)
+
+The interface is available in English (default) and Brazilian Portuguese, with a
+language button on the login, dashboard, and settings screens (the choice is
+saved in the browser). See [docs/i18n.md](docs/i18n.md).
+
+## Snapshots and large drawings
+
+ExcaliDash V2 keeps only the latest N snapshots per drawing by default to prevent
+PostgreSQL growth from large Excalidraw files with embedded images. Saves are
+optimized to avoid creating large snapshots on every autosave. Retention,
+snapshot cadence, server-side image optimization, and autosave timing are all
+configurable via environment variables (see `.env.example` and
+[docs/postgres.md](docs/postgres.md)). A safe, dry-run-by-default
+`scripts/prune-snapshots.cjs` cleans up an existing oversized table.
+
 ## Documentation
 
 - [Quickstart](docs/quickstart.md)
 - [Deployment](docs/deployment.md)
 - [GHCR images](docs/ghcr.md)
 - [PostgreSQL](docs/postgres.md)
+- [Redis (optional)](docs/redis.md)
 - [Backend](docs/backend.md)
 - [Frontend](docs/frontend.md)
+- [Internationalization](docs/i18n.md)
 - [MCP](docs/mcp.md)
 - [Agent Skills](docs/skills.md)
 

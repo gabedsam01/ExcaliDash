@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Folder, Plus, Trash2, Edit2, Archive, FolderOpen, Settings as SettingsIcon, User, LogOut, Shield } from 'lucide-react';
 import type { Collection } from '../types';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
 import { Logo } from './Logo';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { useAuth } from '../context/AuthContext';
 import { getInitialsFromName } from '../utils/user';
 
@@ -120,6 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteCollection,
   onDrop
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout, user, authEnabled } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -182,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="space-y-1">
             <div className="px-6 pb-2 text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
-              Library
+              {t('sidebar.sections.library')}
             </div>
             <div className="pl-3 pr-2">
               <button
@@ -195,14 +198,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               >
                 <LayoutGrid size={18} className={clsx(selectedCollectionId === undefined ? "text-indigo-900 dark:text-neutral-200" : "text-slate-400 dark:text-neutral-500")} />
-                <span className="min-w-0 flex-1 text-left">All Drawings</span>
+                <span className="min-w-0 flex-1 text-left">{t('sidebar.nav.allDrawings')}</span>
               </button>
             </div>
 
             <SidebarItem
               id={"shared"}
               icon={<Shield size={18} />}
-              label="Shared with me"
+              label={t('sidebar.nav.sharedWithMe')}
               isActive={selectedCollectionId === "shared"}
               onClick={() => onSelectCollection("shared")}
             />
@@ -210,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <SidebarItem
               id={null}
               icon={<Archive size={18} />}
-              label="Unorganized"
+              label={t('sidebar.nav.unorganized')}
               isActive={selectedCollectionId === null}
               onClick={() => onSelectCollection(null)}
               onDrop={onDrop}
@@ -219,11 +222,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="space-y-1">
             <div className="flex items-center justify-between px-6 pb-2 group/header">
-              <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">Collections</span>
+              <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">{t('sidebar.sections.collections')}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
                 className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all opacity-0 group-hover/header:opacity-100"
-                title="New Collection"
+                title={t('sidebar.actions.newCollection')}
               >
                 <Plus size={14} strokeWidth={2.5} />
               </button>
@@ -236,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="text"
                   value={newCollectionName}
                   onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="New Collection..."
+                  placeholder={t('sidebar.inputs.newCollectionPlaceholder')}
                   className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500 font-bold text-slate-900 dark:text-white"
                   onBlur={() => !newCollectionName && setIsCreating(false)}
                 />
@@ -290,7 +293,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           >
             <Trash2 size={18} />
-            <span className="min-w-0 flex-1 text-left">Trash</span>
+            <span className="min-w-0 flex-1 text-left">{t('sidebar.nav.trash')}</span>
           </button>
 
           {authEnabled && (
@@ -304,7 +307,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             >
               <User size={18} />
-              <span className="min-w-0 flex-1 text-left">Profile</span>
+              <span className="min-w-0 flex-1 text-left">{t('sidebar.nav.profile')}</span>
             </button>
           )}
 
@@ -319,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             >
               <Shield size={18} />
-              <span className="min-w-0 flex-1 text-left">Admin</span>
+              <span className="min-w-0 flex-1 text-left">{t('sidebar.nav.admin')}</span>
             </button>
           )}
 
@@ -333,8 +336,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           >
             <SettingsIcon size={18} />
-            <span className="min-w-0 flex-1 text-left">Settings</span>
+            <span className="min-w-0 flex-1 text-left">{t('sidebar.nav.settings')}</span>
           </button>
+
+          <div className="flex items-center justify-between px-3 py-1">
+            <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
+              {t('language.label')}
+            </span>
+            <LanguageSwitcher hideIcon />
+          </div>
 
           {authEnabled && (
             <div className="mt-auto pt-4 border-t-2 border-slate-200 dark:border-neutral-700">
@@ -357,7 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full flex items-center gap-3 px-3 py-2 text-sm font-bold rounded-xl transition-all duration-200 border-2 border-rose-300 dark:border-rose-700 bg-white dark:bg-neutral-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 cursor-pointer"
               >
                 <LogOut size={18} />
-                <span className="min-w-0 flex-1 text-left">Logout</span>
+                <span className="min-w-0 flex-1 text-left">{t('common.logout')}</span>
               </button>
             </div>
           )}

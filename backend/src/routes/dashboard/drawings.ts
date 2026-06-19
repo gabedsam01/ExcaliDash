@@ -1,6 +1,18 @@
 import express from "express";
 import { Prisma } from "../../generated/client";
 import { DashboardRouteDeps, SortDirection, SortField } from "./types";
+import { optimizeExcalidrawFiles } from "../../images/imageOptimizer";
+import {
+  createSnapshotWriter,
+  shouldCreateSnapshot,
+  type SnapshotData,
+} from "../../drawings/snapshotService";
+import { pruneDrawingSnapshots } from "../../drawings/snapshotRetention";
+import {
+  perfNow,
+  logSlowSaveIfNeeded,
+  type SaveStageTimings,
+} from "../../drawings/savePerf";
 import {
   getUserTrashCollectionId,
   isTrashCollectionId,
@@ -17,6 +29,7 @@ import {
   normalizeDrawingPermission,
   type DrawingPrincipal,
 } from "../../authz/sharing";
+import { getCache, CacheService } from "../../cache/cacheService";
 
 export const registerDrawingRoutes = (
   app: express.Express,
@@ -41,6 +54,29 @@ export const registerDrawingRoutes = (
     config,
     logAuditEvent,
   } = deps;
+
+  // Shared "smart snapshot" writer: one in-memory coalescing queue per process
+  // so async snapshots for the same drawing don't pile up (only the latest
+  // pending payload is kept).
+  const snapshotWriter = createSnapshotWriter({
+    prisma,
+    maxPerDrawing: config.snapshots.maxPerDrawing,
+    pruneOnSave: config.snapshots.pruneOnSave,
+  });
+
+  // Cache invalidation helpers. The process-local L1 listing cache is cleared
+  // synchronously (cheap, global); the optional Redis L2 is invalidated per-user
+  // (O(1) generation bump) and per-drawing (DEL), fire-and-forget so a Redis
+  // hiccup never delays a write. PostgreSQL remains the source of truth.
+  const invalidateListingsFor = (userId: string): void => {
+    invalidateDrawingsCache();
+    void getCache().invalidateUserListings(userId);
+  };
+  const invalidateDrawingEverywhere = (userId: string, drawingId: string): void => {
+    invalidateDrawingsCache();
+    void getCache().invalidateUserListings(userId);
+    void getCache().invalidateDrawing(drawingId);
+  };
 
   const getRequestPrincipal = async (
     req: express.Request
@@ -162,6 +198,25 @@ export const registerDrawingRoutes = (
       return res.send(cachedBody);
     }
 
+    // L2: distributed listing cache (shared across replicas / surviving cold
+    // processes). Only METADATA listings are cached in Redis — never the heavy
+    // includeData responses that carry elements/appState/files.
+    const cache = getCache();
+    const l2Body = shouldIncludeData
+      ? null
+      : await cache.getUserListing(req.user.id, cacheKey);
+    if (l2Body) {
+      try {
+        // Warm L1 so subsequent same-process reads skip Redis entirely.
+        cacheDrawingsResponse(cacheKey, JSON.parse(l2Body));
+      } catch {
+        /* ignore L1 warm errors */
+      }
+      res.setHeader("X-Cache", "HIT-L2");
+      res.setHeader("Content-Type", "application/json");
+      return res.send(l2Body);
+    }
+
     const summarySelect: Prisma.DrawingSelect = {
       id: true,
       name: true,
@@ -213,6 +268,9 @@ export const registerDrawingRoutes = (
     };
 
     const body = cacheDrawingsResponse(cacheKey, finalResponse);
+    if (!shouldIncludeData) {
+      void cache.setUserListing(req.user.id, cacheKey, body.toString("utf8"));
+    }
     res.setHeader("X-Cache", "MISS");
     res.setHeader("Content-Type", "application/json");
     return res.send(body);
@@ -342,9 +400,20 @@ export const registerDrawingRoutes = (
       return res.status(404).json({ error: "Drawing not found", message: "Drawing does not exist" });
     }
 
-    const drawing = await prisma.drawing.findUnique({ where: { id } });
+    // Hot read: serve the raw drawing row from Redis when available. Permission
+    // was already verified above against PostgreSQL, so a cache hit never leaks
+    // data. The cached row is access-agnostic; per-viewer projection still runs
+    // below. Oversized drawings are skipped at write time (REDIS_MAX_VALUE_BYTES)
+    // and simply fall through to PostgreSQL.
+    const cache = getCache();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let drawing: any = await cache.getDrawingRow<any>(id);
     if (!drawing) {
-      return res.status(404).json({ error: "Drawing not found", message: "Drawing does not exist" });
+      drawing = await prisma.drawing.findUnique({ where: { id } });
+      if (!drawing) {
+        return res.status(404).json({ error: "Drawing not found", message: "Drawing does not exist" });
+      }
+      void cache.setDrawingRow(id, drawing);
     }
 
     const isOwner = principal?.kind === "user" && principal.userId === drawing.userId;
@@ -409,7 +478,7 @@ export const registerDrawingRoutes = (
         files: JSON.stringify(payload.files ?? {}),
       },
     });
-    invalidateDrawingsCache();
+    invalidateListingsFor(req.user.id);
 
     return res.json({
       ...newDrawing,
@@ -421,6 +490,8 @@ export const registerDrawingRoutes = (
   }));
 
   app.put("/drawings/:id", optionalAuth, asyncHandler(async (req, res) => {
+    const tStart = perfNow();
+    const stages: SaveStageTimings = {};
     const principal = await getRequestPrincipal(req);
 
     const { id } = req.params;
@@ -433,6 +504,7 @@ export const registerDrawingRoutes = (
     const existingDrawing = await prisma.drawing.findUnique({ where: { id } });
     if (!existingDrawing) return res.status(404).json({ error: "Drawing not found" });
 
+    const tParse = perfNow();
     const parsed = drawingUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
       if (config.nodeEnv === "development") {
@@ -450,6 +522,7 @@ export const registerDrawingRoutes = (
       files?: Record<string, unknown>;
       version?: number;
     };
+    stages.parseValidateMs = perfNow() - tParse;
     const ownerUserId = existingDrawing.userId;
     const trashCollectionId = getUserTrashCollectionId(ownerUserId);
     const isSceneUpdate =
@@ -463,8 +536,30 @@ export const registerDrawingRoutes = (
     if (payload.name !== undefined) data.name = payload.name;
     if (payload.elements !== undefined) data.elements = JSON.stringify(payload.elements);
     if (payload.appState !== undefined) data.appState = JSON.stringify(payload.appState);
-    if (payload.files !== undefined) data.files = JSON.stringify(payload.files);
     if (payload.preview !== undefined) data.preview = payload.preview;
+
+    // Server-side image optimization + de-duplication (safety net for payloads
+    // that bypass the client compressor: API/MCP/import). fileIds are preserved;
+    // identical content is optimized once and reused. Degrades to the original
+    // bytes if `sharp` is missing or optimization fails.
+    //
+    // This runs on the response path BY DESIGN: the optimized bytes must be the
+    // ones persisted with the drawing, and an async re-write would bump the
+    // version and collide with the editor's optimistic-lock save. To keep the
+    // common path fast, the optimizer cheaply skips (no decode/hash) every file
+    // below IMAGE_OPTIMIZATION_MIN_BYTES — and the editor already client-side
+    // compresses images before upload, so most autosaves do no work here.
+    let imageFilesCount = 0;
+    if (payload.files !== undefined) {
+      const tImage = perfNow();
+      const optimized = await optimizeExcalidrawFiles(
+        payload.files,
+        config.imageOptimization,
+      );
+      stages.imageOptimizeMs = perfNow() - tImage;
+      imageFilesCount = optimized.stats.imageFiles;
+      data.files = JSON.stringify(optimized.files);
+    }
 
     if (payload.collectionId !== undefined) {
       if (!isOwnerAccess(access)) {
@@ -487,73 +582,152 @@ export const registerDrawingRoutes = (
       }
     }
 
+    // Advisory cross-process save lock (REDIS_SAVE_QUEUE_ENABLED). It serializes
+    // concurrent saves of the SAME drawing across replicas and lets us coalesce
+    // their snapshots. Correctness never depends on it — the optimistic version
+    // lock below is authoritative — so when Redis is off/down we simply proceed.
+    const cache = getCache();
+    const saveLock = await cache.acquireSaveLock(id);
+
     const updateWhere: Prisma.DrawingWhereInput = { id };
     if (isSceneUpdate && payload.version !== undefined) {
       updateWhere.version = payload.version;
     }
 
-    const versionConflictError = new Error("VERSION_CONFLICT");
     let updatedDrawing: typeof existingDrawing | null = null;
 
-    try {
-      if (isSceneUpdate) {
-        updatedDrawing = await prisma.$transaction(async (tx) => {
-          await tx.drawingSnapshot.create({
-            data: {
-              drawingId: id,
-              version: existingDrawing.version,
-              elements: existingDrawing.elements,
-              appState: existingDrawing.appState,
-              files: existingDrawing.files,
-            },
-          });
+    // Apply the update with an optimistic lock (the snapshot is no longer part
+    // of this critical path — see the smart-snapshot block below).
+    const tDb = perfNow();
+    const updateResult = await prisma.drawing.updateMany({
+      where: updateWhere,
+      data,
+    });
+    stages.dbUpdateMs = perfNow() - tDb;
 
-          const updateResult = await tx.drawing.updateMany({
-            where: updateWhere,
-            data,
-          });
-          if (updateResult.count === 0) {
-            throw versionConflictError;
-          }
-
-          return tx.drawing.findFirst({ where: { id } });
-        });
-      } else {
-        const updateResult = await prisma.drawing.updateMany({
-          where: updateWhere,
-          data,
-        });
-        if (updateResult.count === 0) {
-          return res.status(404).json({ error: "Drawing not found" });
-        }
-        updatedDrawing = await prisma.drawing.findFirst({
-          where: { id },
-        });
-      }
-    } catch (error) {
-      if (
-        error === versionConflictError ||
-        (error instanceof Error && error.message === versionConflictError.message)
-      ) {
+    if (updateResult.count === 0) {
+      // Nothing was written: release the advisory lock so a retry isn't blocked.
+      await cache.releaseSaveLock(id, saveLock);
+      // A scene update that pinned a version lost the optimistic lock: the
+      // editor's base version is stale. Otherwise the drawing vanished (404).
+      if (isSceneUpdate && payload.version !== undefined) {
         const latestDrawing = await prisma.drawing.findFirst({
           where: { id },
           select: { version: true },
         });
-        if (isSceneUpdate && payload.version !== undefined) {
-          return res.status(409).json({
-            error: "Conflict",
-            code: "VERSION_CONFLICT",
-            message: "Drawing has changed since this editor state was loaded.",
-            currentVersion: latestDrawing?.version ?? null,
-          });
-        }
+        return res.status(409).json({
+          error: "Conflict",
+          code: "VERSION_CONFLICT",
+          message: "Drawing has changed since this editor state was loaded.",
+          currentVersion: latestDrawing?.version ?? null,
+        });
       }
-      throw error;
-    }
-    if (!updatedDrawing) {
       return res.status(404).json({ error: "Drawing not found" });
     }
-    invalidateDrawingsCache();
+
+    updatedDrawing = await prisma.drawing.findFirst({ where: { id } });
+    if (!updatedDrawing) {
+      await cache.releaseSaveLock(id, saveLock);
+      return res.status(404).json({ error: "Drawing not found" });
+    }
+    invalidateDrawingEverywhere(ownerUserId, id);
+
+    // --- Smart snapshot of the PRE-update state -----------------------------
+    // Most autosaves no longer write a heavy snapshot. One is created only for
+    // the first save, an explicit checkpoint, or once SNAPSHOT_MIN_INTERVAL_
+    // SECONDS has elapsed. The decision is made synchronously (a cheap indexed
+    // lookup) so the perf log reflects the real outcome and we never enqueue a
+    // write we then skip. With SNAPSHOT_ASYNC only the write + prune run off the
+    // response path, so large saves stay fast and never fail because of history.
+    let snapshotCreated = false;
+    if (isSceneUpdate) {
+      const snapshotData: SnapshotData = {
+        drawingId: id,
+        version: existingDrawing.version,
+        elements: existingDrawing.elements,
+        appState: existingDrawing.appState,
+        files: existingDrawing.files,
+      };
+
+      const tDecision = perfNow();
+      const lastSnapshot = await prisma.drawingSnapshot.findFirst({
+        where: { drawingId: id },
+        select: { createdAt: true },
+        orderBy: { createdAt: "desc" },
+      });
+      // Cross-replica coalescing: also honor the most recent snapshot time
+      // recorded in Redis save-state (no-op/instant when Redis is off). Two
+      // replicas saving the same drawing within SNAPSHOT_MIN_INTERVAL_SECONDS
+      // then won't each write a snapshot. This can only make snapshots LESS
+      // frequent, never more.
+      const redisSnapshotAtMs = (await cache.getSaveState(id))?.snapshotAt ?? null;
+      stages.snapshotDecisionMs = perfNow() - tDecision;
+
+      const dbLastMs = lastSnapshot
+        ? new Date(lastSnapshot.createdAt).getTime()
+        : null;
+      const effectiveLastMs =
+        dbLastMs !== null && redisSnapshotAtMs !== null
+          ? Math.max(dbLastMs, redisSnapshotAtMs)
+          : dbLastMs ?? redisSnapshotAtMs;
+
+      // A concurrent save (lock busy) is already handling history for this
+      // drawing; skip our snapshot to avoid pile-up. The latest scene still
+      // persists via the optimistic version lock above.
+      snapshotCreated =
+        !saveLock.busy &&
+        shouldCreateSnapshot({
+          hasAnySnapshot: Boolean(lastSnapshot) || redisSnapshotAtMs !== null,
+          lastSnapshotAtMs: effectiveLastMs,
+          nowMs: Date.now(),
+          minIntervalSeconds: config.snapshots.minIntervalSeconds,
+          onEverySave: config.snapshots.onEverySave,
+        });
+
+      if (snapshotCreated) {
+        if (config.snapshots.async) {
+          // Fire-and-forget: the writer logs failures internally and a
+          // snapshot/prune failure must never break the user's save.
+          snapshotWriter.enqueue(snapshotData);
+        } else {
+          const tWrite = perfNow();
+          await snapshotWriter.writeNow(snapshotData);
+          stages.snapshotWriteMs = perfNow() - tWrite;
+        }
+      }
+    }
+
+    // Release the advisory lock and record light save-state for cross-replica
+    // snapshot coalescing + duplicate-save detection (never the payload itself).
+    await cache.releaseSaveLock(id, saveLock);
+    void cache.updateSaveState(id, {
+      payloadHash: isSceneUpdate
+        ? CacheService.hashPayload([
+            data.elements as string | undefined,
+            data.appState as string | undefined,
+            data.files as string | undefined,
+          ])
+        : undefined,
+      saveAt: Date.now(),
+      version: updatedDrawing.version,
+      snapshotAt: snapshotCreated ? Date.now() : undefined,
+      status: "saved",
+    });
+
+    logSlowSaveIfNeeded(config.savePerf, {
+      drawingId: id,
+      totalMs: perfNow() - tStart,
+      payloadBytes:
+        (typeof data.elements === "string" ? Buffer.byteLength(data.elements) : 0) +
+        (typeof data.appState === "string" ? Buffer.byteLength(data.appState) : 0) +
+        (typeof data.files === "string" ? Buffer.byteLength(data.files) : 0),
+      elementsCount: Array.isArray(payload.elements) ? payload.elements.length : 0,
+      filesCount: payload.files ? Object.keys(payload.files).length : 0,
+      imageFilesCount,
+      snapshotCreated,
+      snapshotAsync: config.snapshots.async,
+      stages,
+    });
 
     return res.json({
       ...updatedDrawing,
@@ -579,6 +753,8 @@ export const registerDrawingRoutes = (
       return res.status(404).json({ error: "Drawing not found" });
     }
     invalidateDrawingsCache();
+    void getCache().invalidateUserListings(req.user.id);
+    void getCache().invalidateDrawingFull(id);
 
     if (config.enableAuditLogging) {
       await logAuditEvent({
@@ -617,7 +793,7 @@ export const registerDrawingRoutes = (
         version: 1,
       },
     });
-    invalidateDrawingsCache();
+    invalidateListingsFor(req.user.id);
 
     return res.json({
       ...newDrawing,
@@ -741,7 +917,7 @@ export const registerDrawingRoutes = (
       },
     });
 
-    invalidateDrawingsCache();
+    invalidateDrawingEverywhere(req.user.id, id);
 
     if (config.enableAuditLogging) {
       await logAuditEvent({
@@ -769,7 +945,7 @@ export const registerDrawingRoutes = (
     await prisma.drawingPermission.deleteMany({
       where: { id: permId, drawingId: id },
     });
-    invalidateDrawingsCache();
+    invalidateDrawingEverywhere(req.user.id, id);
 
     if (config.enableAuditLogging) {
       await logAuditEvent({
@@ -968,7 +1144,9 @@ export const registerDrawingRoutes = (
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
     if (!snapshot) return res.status(404).json({ error: "Snapshot not found" });
 
-    // Snapshot current state before restoring (so restore is reversible)
+    // Snapshot current state before restoring (so restore is reversible).
+    // This is an explicit checkpoint, so it is always created — then pruned to
+    // the retention limit like any other snapshot.
     await prisma.drawingSnapshot.create({
       data: {
         drawingId: id,
@@ -978,6 +1156,9 @@ export const registerDrawingRoutes = (
         files: drawing.files,
       },
     });
+    if (config.snapshots.pruneOnSave) {
+      await pruneDrawingSnapshots(prisma, id, config.snapshots.maxPerDrawing);
+    }
 
     // Apply snapshot
     const updated = await prisma.drawing.update({
@@ -990,7 +1171,7 @@ export const registerDrawingRoutes = (
       },
     });
 
-    invalidateDrawingsCache();
+    invalidateDrawingEverywhere(drawing.userId, id);
 
     return res.json({
       ...updated,

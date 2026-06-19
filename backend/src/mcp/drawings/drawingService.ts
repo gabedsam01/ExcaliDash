@@ -5,6 +5,7 @@
  */
 import type { ExcalidrawElement, ExcalidrawScene } from "../types";
 import { invalid, notFound } from "../errors";
+import { pruneDrawingSnapshots } from "../../drawings/snapshotRetention";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export interface McpDrawingPrisma {
@@ -15,6 +16,8 @@ export interface McpDrawingPrisma {
   };
   drawingSnapshot: {
     create(args: any): Promise<any>;
+    findMany(args: any): Promise<Array<{ id: string }>>;
+    deleteMany(args: any): Promise<{ count: number }>;
   };
   collection: {
     findFirst(args: any): Promise<any | null>;
@@ -40,6 +43,13 @@ export interface DrawingServiceDeps {
   frontendBaseUrl: string | null;
   maxElements: number;
   sanitizeScene: SceneSanitizer;
+  /** Snapshot retention. When omitted, snapshots are never pruned. */
+  retention?: { maxPerDrawing: number; pruneOnSave: boolean };
+  /**
+   * Optional cache invalidation hook fired after an MCP tool creates or updates
+   * a drawing, so the REST hot-drawing + listing caches stay consistent.
+   */
+  onDrawingChanged?: (params: { userId: string; drawingId: string }) => void;
 }
 
 export interface DrawingSummary {
@@ -63,6 +73,20 @@ const parse = <T>(value: unknown, fallback: T): T => {
 
 export const createDrawingService = (deps: DrawingServiceDeps) => {
   const { prisma, frontendBaseUrl, maxElements, sanitizeScene } = deps;
+
+  // Keep snapshot history bounded for MCP-created checkpoints too. Best-effort:
+  // a prune failure must never break the underlying tool call.
+  const pruneSnapshotsIfEnabled = async (drawingId: string): Promise<void> => {
+    if (!deps.retention?.pruneOnSave) return;
+    try {
+      await pruneDrawingSnapshots(prisma, drawingId, deps.retention.maxPerDrawing);
+    } catch (err) {
+      console.error("[mcp] snapshot prune failed", {
+        drawingId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 
   // Mirror the REST guard: a caller may only attach a drawing to a collection
   // they own. (FK alone allows pointing at another tenant's collection id.)
@@ -157,6 +181,7 @@ export const createDrawingService = (deps: DrawingServiceDeps) => {
         ...(params.collectionId ? { collectionId: params.collectionId } : {}),
       },
     });
+    deps.onDrawingChanged?.({ userId, drawingId: drawing.id });
     return toSummary(drawing);
   };
 
@@ -222,6 +247,7 @@ export const createDrawingService = (deps: DrawingServiceDeps) => {
         files: drawing.files,
       },
     });
+    await pruneSnapshotsIfEnabled(drawing.id);
     return { version: drawing.version };
   };
 
@@ -250,6 +276,7 @@ export const createDrawingService = (deps: DrawingServiceDeps) => {
           files: owned.files,
         },
       });
+      await pruneSnapshotsIfEnabled(owned.id);
     }
 
     const data: Record<string, unknown> = {};
@@ -276,6 +303,7 @@ export const createDrawingService = (deps: DrawingServiceDeps) => {
       where: { id: owned.id },
       data,
     });
+    deps.onDrawingChanged?.({ userId, drawingId: owned.id });
     return toSummary(updated);
   };
 

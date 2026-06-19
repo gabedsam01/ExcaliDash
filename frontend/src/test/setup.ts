@@ -1,4 +1,8 @@
 import "@testing-library/jest-dom/vitest";
+// Initialize app-shell i18n for every test worker so components that call
+// useTranslation() resolve real strings (English defaults) even when their
+// usual i18n import chain is mocked away (e.g. a mocked Sidebar).
+import "../i18n";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

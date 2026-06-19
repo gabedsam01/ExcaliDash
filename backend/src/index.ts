@@ -26,10 +26,13 @@ import { errorHandler, asyncHandler } from "./middleware/errorHandler";
 import authRouter from "./auth";
 import { logAuditEvent } from "./utils/audit";
 import { registerDashboardRoutes } from "./routes/dashboard";
+import { pruneDrawingSnapshots } from "./drawings/snapshotRetention";
 import { registerImportExportRoutes } from "./routes/importExport";
 import { registerSystemRoutes } from "./routes/system";
 import { prisma } from "./db/prisma";
 import { createDrawingsCacheStore } from "./server/drawingsCache";
+import { initRedis } from "./cache/redisClient";
+import { initCacheService } from "./cache/cacheService";
 import { registerCsrfProtection } from "./server/csrf";
 import { registerSocketHandlers } from "./server/socket";
 import {
@@ -174,6 +177,15 @@ const {
   cacheDrawingsResponse,
   invalidateDrawingsCache,
 } = createDrawingsCacheStore(DRAWINGS_CACHE_TTL_MS);
+
+// Optional Redis speed layer. Wiring the cache service is synchronous; the
+// connection is established in the background and the app keeps serving on
+// PostgreSQL until (and unless) Redis becomes ready. Fully no-op when
+// REDIS_ENABLED=false. PostgreSQL is always the source of truth.
+const redisDebug =
+  process.env.REDIS_DEBUG === "true" || config.nodeEnv !== "production";
+initCacheService(config.redis, redisDebug);
+initRedis(config.redis);
 
 const getUserTrashCollectionId = (userId: string): string => `trash:${userId}`;
 
@@ -613,7 +625,9 @@ const isMain =
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   typeof require !== "undefined" && require.main === module;
 
-// Snapshot cleanup: delete snapshots older than 2 days (runs hourly)
+// Snapshot cleanup: delete snapshots older than 2 days (runs hourly).
+// This is a time-based safety net; per-drawing count retention (keep newest
+// MAX_SNAPSHOTS_PER_DRAWING) is enforced on each save.
 const SNAPSHOT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 setInterval(async () => {
   try {
@@ -628,6 +642,38 @@ setInterval(async () => {
     console.error("[Cleanup] Snapshot cleanup failed:", err);
   }
 }, 60 * 60 * 1000);
+
+/**
+ * Optional one-shot count-based prune at startup (SNAPSHOT_PRUNE_ON_STARTUP).
+ * Default off to avoid unexpected deletes on boot. Runs in the background so it
+ * never blocks the server from accepting connections.
+ */
+const runStartupSnapshotPruneIfEnabled = async (): Promise<void> => {
+  if (!config.snapshots.pruneOnStartup) return;
+  if (config.snapshots.maxPerDrawing <= 0) {
+    console.log(
+      "[snapshot] startup prune skipped: retention disabled (MAX_SNAPSHOTS_PER_DRAWING <= 0)",
+    );
+    return;
+  }
+  const keep = config.snapshots.maxPerDrawing;
+  console.log(`[snapshot] startup prune started (keep ${keep} per drawing)`);
+  let processed = 0;
+  let totalDeleted = 0;
+  try {
+    const drawings = await prisma.drawing.findMany({ select: { id: true } });
+    for (const drawing of drawings) {
+      const { deleted } = await pruneDrawingSnapshots(prisma, drawing.id, keep);
+      totalDeleted += deleted;
+      processed += 1;
+    }
+    console.log(
+      `[snapshot] startup prune done: ${processed} drawings scanned, ${totalDeleted} snapshots deleted`,
+    );
+  } catch (err) {
+    console.error("[snapshot] startup prune failed:", err);
+  }
+};
 
 if (isMain) {
   httpServer.listen(PORT, async () => {
@@ -669,6 +715,9 @@ if (isMain) {
     } catch (error) {
       console.error("[libraries] pack seed failed:", error);
     }
+
+    // Background, non-blocking: optional snapshot retention sweep at startup.
+    void runStartupSnapshotPruneIfEnabled();
 
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${config.nodeEnv}`);
